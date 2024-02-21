@@ -93,16 +93,6 @@ if test ! -d online ; then
   cp -R ../../* online/
 fi
 
-
-# brand repo
-if test ! -d online-branding ; then
-  git clone git@gitlab.collabora.com:productivity/online-branding.git online-branding || echo "Could not clone this proprietary repo"
-fi
-
-if test -d online-branding ; then
-  ( cd online-branding && git pull -r ) || exit 1
-fi
-
 # copy stuff
 mkdir -p "$INSTDIR"/opt/
 cp -a "$LOCOREPATH"/instdir "$INSTDIR"/opt/lokit
