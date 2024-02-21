@@ -90,7 +90,7 @@ fi
 # online repo
 if test ! -d online ; then
   mkdir online
-  cp -R ../../* online/
+  cp -R ../../../* online/
 fi
 
 # copy stuff
