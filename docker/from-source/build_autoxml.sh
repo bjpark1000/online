@@ -87,12 +87,6 @@ fi
 
 
 ##### cloning & updating #####
-# online repo
-if test ! -d online ; then
-  mkdir online
-  rsync -av --exclude=docker ../../../* online/
-fi
-
 # copy stuff
 mkdir -p "$INSTDIR"/opt/
 cp -a "$LOCOREPATH"/instdir "$INSTDIR"/opt/lokit
@@ -100,12 +94,12 @@ cp -a "$LOCOREPATH"/instdir "$INSTDIR"/opt/lokit
 ##### coolwsd & cool #####
 
 # build
-( cd online && ./autogen.sh ) || exit 1
-( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-silent-rules --with-lokit-path="$LOCOREPATH"/include --with-lo-path="$INSTDIR"/opt/lokit --with-poco-includes=$BUILDDIR/poco/include --with-poco-libs=$BUILDDIR/poco/lib $ONLINE_EXTRA_BUILD_OPTIONS) || exit 1
-( cd online && make -j $(nproc)) || exit 1
+( cd ../../ && ./autogen.sh ) || exit 1
+( cd ../../ && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-silent-rules --with-lokit-path="$LOCOREPATH"/include --with-lo-path="$LOCOREPATH"/instdir --with-poco-includes=$BUILDDIR/poco/include --with-poco-libs=$BUILDDIR/poco/lib $ONLINE_EXTRA_BUILD_OPTIONS) || exit 1
+( cd ../../ && make -j $(nproc)) || exit 1
 
 # copy stuff
-( cd online && DESTDIR="$INSTDIR" make install ) || exit 1
+( cd ../../ && DESTDIR="$INSTDIR" make install ) || exit 1
 
 ##### online branding #####
 if test -d online-branding ; then
