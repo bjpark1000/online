@@ -87,15 +87,6 @@ fi
 
 
 ##### cloning & updating #####
-
-# core repo
-if test ! -d core ; then
-  git clone https://git.libreoffice.org/core || exit 1
-fi
-
-( cd core && git fetch --all && git checkout $CORE_BRANCH && ./g pull -r ) || exit 1
-
-
 # online repo
 if test ! -d online ; then
   mkdir online
@@ -112,19 +103,9 @@ if test -d online-branding ; then
   ( cd online-branding && git pull -r ) || exit 1
 fi
 
-##### LOKit (core) #####
-
-# build
-if [ "$CORE_BRANCH" == "distro/collabora/co-22.05" ]; then
-  ( cd core && ./autogen.sh --with-distro=CPLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
-else
-  ( cd core && ./autogen.sh --with-distro=LibreOfficeOnline ) || exit 1
-fi
-( cd core && make $CORE_BUILD_TARGET ) || exit 1
-
 # copy stuff
 mkdir -p "$INSTDIR"/opt/
-cp -a core/instdir "$INSTDIR"/opt/lokit
+cp -a "$LOCOREPATH"/instdir "$INSTDIR"/opt/lokit
 
 ##### coolwsd & cool #####
 
