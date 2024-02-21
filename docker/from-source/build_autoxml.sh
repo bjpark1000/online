@@ -95,19 +95,11 @@ cp -a "$LOCOREPATH"/instdir "$INSTDIR"/opt/lokit
 
 # build
 ( cd ../../../ && ./autogen.sh ) || exit 1
-( cd ../../../ && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-silent-rules --with-lokit-path="$LOCOREPATH"/include --with-lo-path="$LOCOREPATH"/instdir --with-poco-includes=$BUILDDIR/poco/include --with-poco-libs=$BUILDDIR/poco/lib $ONLINE_EXTRA_BUILD_OPTIONS) || exit 1
+( cd ../../../ && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-silent-rules --with-lokit-path="$LOCOREPATH"/include --with-lo-path="$LOCOREPATH"/instdir $ONLINE_EXTRA_BUILD_OPTIONS) || exit 1
 ( cd ../../../ && make -j $(nproc)) || exit 1
 
 # copy stuff
 ( cd ../../../ && DESTDIR="$INSTDIR" make install ) || exit 1
-
-##### online branding #####
-if test -d online-branding ; then
-  cd online-branding
-  ./brand.sh $INSTDIR/opt/lokit $INSTDIR/usr/share/coolwsd/browser/dist 6 # CODE
-  ./brand.sh $INSTDIR/opt/lokit $INSTDIR/usr/share/coolwsd/browser/dist 7 # Nextcloud Office
-  cd ..
-fi
 
 # Create new docker image
 if [ -z "$NO_DOCKER_IMAGE" ]; then
