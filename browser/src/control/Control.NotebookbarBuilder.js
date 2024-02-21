@@ -526,6 +526,11 @@ L.Control.NotebookbarBuilder = L.Control.JSDialogBuilder.extend({
 		if (docType === 'text') {
 			submenuOpts = [
 				{
+					'id': 'downloadas-autoxml',
+					'text': _('AutoXML'),
+					'command': 'downloadas-autoxml'
+				},
+				{
 					'id': 'downloadas-odt',
 					'text': _('ODF text document (.odt)')
 				},

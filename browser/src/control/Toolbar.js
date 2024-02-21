@@ -245,6 +245,10 @@ L.Map.include({
 		if (id == 'export' && format === 'pdf' && options === '')
 			options = '{\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"false\"}}';
 
+		// download: don't export comments into PDF by default
+		if (id == 'export' && format === 'autoxml' && options === '')
+			options = '{\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"false\"}}';
+
 		if (!window.ThisIsAMobileApp)
 			this.showBusy(_('Downloading...'), false);
 

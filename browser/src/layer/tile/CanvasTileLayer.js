@@ -2061,6 +2061,7 @@ L.CanvasTileLayer = L.Layer.extend({
 		var command = app.socket.parseServerCmd(textMsg);
 		var parser = document.createElement('a');
 		parser.href = window.host;
+		console.log(command);
 
 		var url = window.makeHttpUrlWopiSrc('/' + this._map.options.urlPrefix + '/',
 			this._map.options.doc, '/download/' + command.downloadid);
@@ -2068,6 +2069,28 @@ L.CanvasTileLayer = L.Layer.extend({
 		this._map.hideBusy();
 		if (this._map['wopi'].DownloadAsPostMessage) {
 			this._map.fire('postMessage', {msgId: 'Download_As', args: {Type: command.id, URL: url}});
+		}
+		else if (command.id == 'autoxml') {
+			if ('processCoolUrl' in window) {
+				url = window.processCoolUrl({ url: url, type: 'export' });
+			}
+
+			var xhttp = new XMLHttpRequest();
+			xhttp.open('GET', url);
+			xhttp.responseType = 'blob';
+			xhttp.send();
+			xhttp.onload = function() {
+				var file = xhttp.response;
+				var msg = {
+					'MessageId': 'Action_Export',
+					'SendTime': Date.now(),
+					'Values': {
+						'Format': 'autoxml',
+						'File': file
+					}
+				};
+				parent.postMessage(msg, '*');
+			};
 		}
 		else if (command.id === 'print') {
 			if (this._map.options.print === false || L.Browser.cypressTest) {

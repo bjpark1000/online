@@ -1132,7 +1132,7 @@ bool ChildSession::downloadAs(const StringVector& tokens)
             << (filterOptions.empty() ? "(nullptr)" : filterOptions.c_str()) << ']');
 
     bool success = getLOKitDocument()->saveAs(url.c_str(),
-                               format.empty() ? nullptr : format.c_str(),
+                               format.empty() ? nullptr : format == "autoxml" ? "pdf" : format.c_str(),
                                filterOptions.empty() ? nullptr : filterOptions.c_str());
 
     if (!success)
@@ -1149,7 +1149,7 @@ bool ChildSession::downloadAs(const StringVector& tokens)
 
     // Send download id to the client
     sendTextFrame("downloadas: downloadid=" + tmpDir +
-                  " port=" + std::to_string(ClientPortNumber) + " id=" + id);
+                  " port=" + std::to_string(ClientPortNumber) + " id=" + (format == "autoxml" ? "autoxml" : id));
 #endif
     return true;
 }

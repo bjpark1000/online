@@ -623,6 +623,11 @@ button.ui-tab.notebookbar {
 	background: url('images/lc_exportepub.svg') center;
 }
 
+[class*='autoxml-submenu-icon'] {
+	background: url('images/lc_exportautoxml.svg') center;
+	background-size: contain;
+}
+
 [class*='as-xls-submenu-icon'] {
 	background: url('images/lc_downloadas-xls.svg') center;
 }
