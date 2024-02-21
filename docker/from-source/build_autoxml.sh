@@ -90,7 +90,7 @@ fi
 # online repo
 if test ! -d online ; then
   mkdir online
-  cp -R ../../../* online/
+  rsync -av --exclude=docker ../../../* online/
 fi
 
 # copy stuff
