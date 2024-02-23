@@ -455,6 +455,7 @@ if test "$enable_debug" = "yes"; then
       AC_MSG_RESULT([no (to enable --enable-logging-test-asserts)])
     fi
 else
+    ENABLE_BUNDLE=false
     AC_MSG_RESULT([no (Release build)])
     AC_DEFINE([ENABLE_DEBUG],0,[Whether to compile in some extra debugging support code and disable some security pieces])
 fi
