@@ -24,7 +24,7 @@ L.ImpressTileLayer = L.CanvasTileLayer.extend({
 		}
 
 		this._preview = L.control.partsPreview();
-		this._partHashes = null;
+		app.impress.partHashes = null;
 		if (window.mode.isMobile()) {
 			this._addButton = L.control.mobileSlide();
 			L.DomUtil.addClass(L.DomUtil.get('mobile-edit-button'), 'impress');
@@ -45,6 +45,22 @@ L.ImpressTileLayer = L.CanvasTileLayer.extend({
 
 		this._partHeightTwips = 0; // Single part's height.
 		this._partWidthTwips = 0; // Single part's width. These values are equal to _docWidthTwips & _docHeightTwips when app.file.partBasedView is true.
+
+		app.events.on('contextchange', this._onContextChange.bind(this));
+	},
+
+	_onContextChange(e) {
+		app.impress.notesMode = e.detail.context === 'NotesPage';
+
+		if (app.map.uiManager.getCurrentMode() === 'notebookbar') {
+			const targetElement = document.getElementById('notesmode');
+			if (!targetElement) return;
+
+			if (e.detail.context === 'NotesPage')
+				targetElement.classList.add('selected');
+			else
+				targetElement.classList.remove('selected');
+		}
 	},
 
 	_isPCWInsideFlex: function () {
@@ -83,7 +99,7 @@ L.ImpressTileLayer = L.CanvasTileLayer.extend({
 		comment.anchorPos = [docTopLeft[0], docTopLeft[1]];
 		comment.rectangle = [docTopLeft[0], docTopLeft[1], 566, 566];
 
-		comment.parthash = this._partHashes[this._selectedPart];
+		comment.parthash = app.impress.partHashes[this._selectedPart];
 		var annotation = app.sectionContainer.getSectionWithName(L.CSections.CommentList.name).add(comment);
 		app.sectionContainer.getSectionWithName(L.CSections.CommentList.name).modify(annotation);
 	},
@@ -92,7 +108,7 @@ L.ImpressTileLayer = L.CanvasTileLayer.extend({
 		this._map = map;
 		map.addControl(this._preview);
 		map.on('updateparts', this.onUpdateParts, this);
-		map.on('updatepermission', this.onUpdatePermission, this);
+		app.events.on('updatepermission', this.onUpdatePermission.bind(this));
 
 		if (!map._docPreviews)
 			map._docPreviews = {};
@@ -144,7 +160,7 @@ L.ImpressTileLayer = L.CanvasTileLayer.extend({
 
 	onUpdatePermission: function (e) {
 		if (window.mode.isMobile()) {
-			if (e.perm === 'edit') {
+			if (e.detail.perm === 'edit') {
 				this._addButton.addTo(this._map);
 			} else {
 				this._addButton.remove();
@@ -280,19 +296,18 @@ L.ImpressTileLayer = L.CanvasTileLayer.extend({
 			}
 			this._selectedMode = (command.mode !== undefined) ? command.mode : 0;
 			this._resetPreFetching(true);
-			this._update();
 			var partMatch = textMsg.match(/[^\r\n]+/g);
 			// only get the last matches
 			var newPartHashes = partMatch.slice(partMatch.length - this._parts);
-			var refreshAnnotation = this._partHashes && (this._partHashes.length !== newPartHashes.length || !this._partHashes.every(function(element,i) { return element === newPartHashes[i]; }));
-			this._partHashes = newPartHashes;
+			var refreshAnnotation = app.impress.partHashes && (app.impress.partHashes.length !== newPartHashes.length || !app.impress.partHashes.every(function(element,i) { return element === newPartHashes[i]; }));
+			app.impress.partHashes = newPartHashes;
 			this._hiddenSlides = new Set(command.hiddenparts);
 			this._map.fire('updateparts', {
 				selectedPart: this._selectedPart,
 				selectedParts: this._selectedParts,
 				parts: this._parts,
 				docType: this._docType,
-				partNames: this._partHashes
+				partNames: app.impress.partHashes
 			});
 			if (refreshAnnotation)
 				app.socket.sendMessage('commandvalues command=.uno:ViewAnnotations');

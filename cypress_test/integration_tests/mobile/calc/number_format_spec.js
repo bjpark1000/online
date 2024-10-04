@@ -1,15 +1,13 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply number formatting.', function() {
-	var origTestFileName = 'number_format.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		helper.setupAndLoadDocument('calc/number_format.ods');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
@@ -19,10 +17,6 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply number formattin
 		mobileHelper.openMobileWizard();
 		cy.cGet('#ScNumberFormatPropertyPanel').click();
 		cy.cGet('#numberformatcombobox > .ui-header').should('be.visible');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function selectFormatting(formattingString) {
@@ -117,7 +111,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply number formattin
 		cy.cGet('.unoNumberFormatDecimal').should('be.visible');
 
 		// Change to number formatting
-		helper.clickOnIdle('.unoNumberFormatDecimal');
+		cy.cGet('.unoNumberFormatDecimal').click();
 
 		cy.cGet('.unoNumberFormatDecimal').should('have.class', 'selected');
 		cy.cGet('#numberformatcombobox .ui-header-left').should('have.text', 'Number');
@@ -310,7 +304,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply number formattin
 			.should('not.have.prop', 'checked', true);
 
 		// Change the option
-		helper.clickOnIdle('#negativenumbersred input');
+		cy.cGet('#negativenumbersred input').click();
 
 		cy.cGet('#negativenumbersred input')
 			.should('have.prop', 'checked', true);
@@ -332,7 +326,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply number formattin
 			.should('not.have.prop', 'checked', true);
 
 		// Change the option
-		helper.clickOnIdle('#thousandseparator input');
+		cy.cGet('#thousandseparator input').click();
 
 		cy.cGet('#thousandseparator input')
 			.should('have.prop', 'checked', true);

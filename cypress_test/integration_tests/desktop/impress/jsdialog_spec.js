@@ -1,16 +1,11 @@
-/* global describe it cy require afterEach beforeEach */
+/* global describe it cy require beforeEach */
 
 var helper = require('../../common/helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'JSDialog Tests', function() {
-	var testFileName = 'jsdialog.odp';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'impress');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('impress/jsdialog.odp');
 	});
 
 	it('Check disabled state in animation sidebar', function() {
@@ -27,10 +22,11 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'JSDialog Tests', function(
 
 		// select animation entry
 		cy.cGet('#custom_animation_list').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Shape 1').click();
+		cy.wait(500);
 
 		// some options are enabled
 		cy.cGet('#start_effect_list-input').should('not.be.disabled');
-		cy.cGet('#combo-input').should('be.disabled');
+		cy.cGet('#combo-input').should('not.be.visible');
 		cy.cGet('#anim_duration-input').should('not.be.disabled');
 		cy.cGet('#delay_value-input').should('not.be.disabled');
 

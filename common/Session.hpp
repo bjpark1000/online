@@ -16,6 +16,7 @@
 #include <memory>
 #include <map>
 #include <ostream>
+#include <optional>
 #include <type_traits>
 
 #include <Poco/Path.h>
@@ -23,7 +24,6 @@
 
 #include "Protocol.hpp"
 #include "Log.hpp"
-#include "MessageQueue.hpp"
 #include "Message.hpp"
 #include "TileCache.hpp"
 #include "WebSocketHandler.hpp"
@@ -107,6 +107,9 @@ public:
     /// Returns true iff the view is either non-readonly or can change comments.
     bool isEditable() const { return !isReadOnly() || isAllowChangeComments(); }
 
+    /// if certification verification was disabled for the wopi server
+    bool isDisableVerifyHost() const { return _disableVerifyHost; }
+
     /// overridden to prepend client ids on messages by the Kit
     virtual bool sendBinaryFrame(const char* buffer, int length);
     virtual bool sendTextFrame(const char* buffer, const int length);
@@ -127,12 +130,6 @@ public:
     }
 
     /// Sends a WebSocket Text message.
-    int sendMessage(const std::string& msg)
-    {
-        return sendTextFrame(msg.data(), msg.size());
-    }
-
-    // FIXME: remove synonym - and clean from WebSocketHandler too ... (?)
     bool sendTextFrame(const std::string& text)
     {
         return sendTextFrame(text.data(), text.size());
@@ -208,6 +205,8 @@ public:
 
     void setWatermarkText(const std::string& watermarkText) { _watermarkText = watermarkText; }
 
+    void setIsAdminUser(const std::optional<bool> isAdminUser) { _isAdminUser = isAdminUser; }
+
     void setUserExtraInfo(const std::string& userExtraInfo) { _userExtraInfo = userExtraInfo; }
 
     void setUserPrivateInfo(const std::string& userPrivateInfo) { _userPrivateInfo = userPrivateInfo; }
@@ -240,6 +239,8 @@ public:
 
     const std::string& getDocPassword() const { return _docPassword; }
 
+    const std::optional<bool> getIsAdminUser() const { return _isAdminUser; }
+
     const std::string& getUserExtraInfo() const { return _userExtraInfo; }
 
     const std::string& getUserPrivateInfo() const { return _userPrivateInfo; }
@@ -253,6 +254,10 @@ public:
     const std::string& getDeviceFormFactor() const { return _deviceFormFactor; }
 
     const std::string& getSpellOnline() const { return _spellOnline; }
+
+    const std::string& getDarkTheme() const { return _darkTheme; }
+
+    const std::string& getDarkBackground() const { return _darkBackground; }
 
     const std::string& getBatchMode() const { return _batch; }
 
@@ -346,6 +351,9 @@ private:
     /// Name of the user to whom the session belongs to, anonymized for logging.
     std::string _userNameAnonym;
 
+    /// If user is admin on the integrator side
+    std::optional<bool> _isAdminUser;
+
     /// Extra info per user, mostly mail, avatar, links, etc.
     std::string _userExtraInfo;
 
@@ -370,6 +378,12 @@ private:
     /// The start value of Auto Spell Checking whether it is enabled or disabled on start.
     std::string _spellOnline;
 
+    /// The start value for Dark Theme whether it is active or not on start.
+    std::string _darkTheme;
+    ///
+    /// The start value for Dark Background whether it is active or not on start.
+    std::string _darkBackground;
+
     /// Disable dialogs interactivity.
     std::string _batch;
 
@@ -381,6 +395,10 @@ private:
 
     /// Specifies whether accessibility support is enabled for this session.
     bool _accessibilityState;
+
+    /// Specifies whether certification verification for the wopi server
+    /// should be disabled in core
+    bool _disableVerifyHost;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

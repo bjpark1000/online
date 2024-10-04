@@ -38,7 +38,8 @@ public:
         _data(copyDataAfterOffset(message.data(), message.size(), _forwardToken.size())),
         _tokens(StringVector::tokenize(_data.data(), _data.size())),
         _id(makeId(dir)),
-        _type(detectType())
+        _type(detectType()),
+        _hash(0)
     {
         LOG_TRC("Message " << abbr());
     }
@@ -53,7 +54,8 @@ public:
         _data(copyDataAfterOffset(message.data(), message.size(), _forwardToken.size())),
         _tokens(StringVector::tokenize(message.data() + _forwardToken.size(), message.size() - _forwardToken.size())),
         _id(makeId(dir)),
-        _type(detectType())
+        _type(detectType()),
+        _hash(0)
     {
         _data.reserve(std::max(reserve, message.size()));
         LOG_TRC("Message " << abbr());
@@ -68,7 +70,8 @@ public:
         _data(copyDataAfterOffset(p, len, _forwardToken.size())),
         _tokens(StringVector::tokenize(_data.data(), _data.size())),
         _id(makeId(dir)),
-        _type(detectType())
+        _type(detectType()),
+        _hash(0)
     {
         LOG_TRC("Message " << abbr());
     }
@@ -82,6 +85,10 @@ public:
     bool firstTokenMatches(const std::string& target) const { return _tokens[0] == target; }
     std::string operator[](size_t index) const { return _tokens[index]; }
 
+    /// Allow a message to annotate a hash of its content for use later
+    uint32_t getHash() const { return _hash; }
+    void setHash(uint32_t hash) { _hash = hash; }
+
     /// Find a subarray in the raw message.
     int find(const char* sub, const std::size_t subLen) const
     {
@@ -90,6 +97,9 @@ public:
 
     /// Returns true iff the subarray exists in the raw message.
     bool contains(const char* p, const std::size_t len) const { return find(p, len) >= 0; }
+
+    /// Returns true iff the subarray exists in the raw message.
+    bool contains(const std::string &msg) const { return contains(msg.c_str(), msg.size()); }
 
     const std::string& firstLine()
     {
@@ -170,6 +180,7 @@ private:
             _tokens.equals(0, "delta:") ||
             _tokens.equals(0, "renderfont:") ||
             _tokens.equals(0, "rendersearchresult:") ||
+            _tokens.equals(0, "slidelayer:") ||
             _tokens.equals(0, "windowpaint:") ||
             _tokens.equals(0, "urp:") )
         {
@@ -215,6 +226,7 @@ private:
     const std::string _id;
     std::string _firstLine;
     const Type _type;
+    uint32_t _hash;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

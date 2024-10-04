@@ -3,7 +3,7 @@
  * L.Map.SlideShow is handling the slideShow action
  */
 
-/* global _ */
+/* global _ sanitizeUrl */
 L.Map.mergeOptions({
 	slideShow: true
 });
@@ -36,6 +36,11 @@ L.Map.SlideShow = L.Handler.extend({
 	},
 
 	_onFullScreen: function (e) {
+		if (this._checkPresentationDisabled()) {
+			this._notifyPresentationDisabled();
+			return;
+		}
+
 		if (this._checkAlreadyPresenting()) {
 			this._notifyAlreadyPresenting();
 			return;
@@ -52,40 +57,53 @@ L.Map.SlideShow = L.Handler.extend({
 			return;
 		}
 
-		if (!this._cypressSVGPresentationTest && !this._map['wopi'].DownloadAsPostMessage) {
+		let doPresentation = function(that, e) {
+			that._presentInWindow = false;
+
+			that._startSlideNumber = 0; // Default: start from page 0
+			if (typeof e.startSlideNumber !== 'undefined') {
+				that._startSlideNumber = e.startSlideNumber;
+			}
+			that.fullscreen = !that._cypressSVGPresentationTest;
+			that._map.downloadAs('slideshow.svg', 'svg', null, 'slideshow');
+
+			L.DomEvent.on(document, 'fullscreenchange', that._onFullScreenChange, that);
+		};
+
+		let fallback = function(that, e) {
+			// fallback to "open in new tab"
+			if (that._slideShow) {
+				L.DomUtil.remove(that._slideShow);
+				that._slideShow = null;
+			}
+
+			doPresentation(that, e);
+		};
+
+		if (!(this._cypressSVGPresentationTest || this._map['wopi'].DownloadAsPostMessage)) {
 			this._slideShow = L.DomUtil.create('iframe', 'leaflet-slideshow', this._map._container);
 			if (this._slideShow.requestFullscreen) {
-				this._slideShow.requestFullscreen();
-			}
-			else if (this._slideShow.msRequestFullscreen) {
-				this._slideShow.msRequestFullscreen();
-			}
-			else if (this._slideShow.mozRequestFullScreen) {
-				this._slideShow.mozRequestFullScreen();
-			}
-			else if (this._slideShow.webkitRequestFullscreen) {
-				this._slideShow.webkitRequestFullscreen();
-			} else {
-				// fallback to "open in new tab"
-				L.DomUtil.remove(this._slideShow);
-				this._slideShow = null;
-			}
 
-			L.DomEvent.on(document, 'fullscreenchange webkitfullscreenchange mozfullscreenchange msfullscreenchange',
-				this._onFullScreenChange, this);
+				let that = this;
+				this._slideShow.requestFullscreen()
+					.then(function () { doPresentation(that, e); })
+					.catch(function () {
+						fallback(that, e);
+					});
+
+				return;
+			}
 		}
 
-		this._presentInWindow = false;
-
-		this._startSlideNumber = 0; // Default: start from page 0
-		if (e.startSlideNumber !== undefined) {
-			this._startSlideNumber = e.startSlideNumber;
-		}
-		this.fullscreen = !this._cypressSVGPresentationTest;
-		this._map.downloadAs('slideshow.svg', 'svg', null, 'slideshow');
+		fallback(this, e);
 	},
 
 	_onPresentWindow: function (e) {
+		if (this._checkPresentationDisabled()) {
+			this._notifyPresentationDisabled();
+			return;
+		}
+
 		if (this._checkAlreadyPresenting()) {
 			this._notifyAlreadyPresenting();
 			return;
@@ -105,10 +123,7 @@ L.Map.SlideShow = L.Handler.extend({
 			return;
 		}
 
-		this.fullscreen = document.fullscreenElement ||
-			document.webkitIsFullScreen ||
-			document.mozFullScreen ||
-			document.msFullscreenElement;
+		this.fullscreen = document.fullscreenElement;
 		if (!this.fullscreen) {
 			this._stopFullScreen();
 		}
@@ -142,16 +157,38 @@ L.Map.SlideShow = L.Handler.extend({
 	_startPlaying: function() {
 		// Windowed Presentation
 		if (this._presentInWindow) {
-			this._slideShowWindowProxy = window.open(this._slideURL, '_blank', 'popup'); // do we need to set this to null when closed or is that already done?
+
+			this._slideShowWindowProxy = window.open('', '_blank', 'popup');
+
 			if (!this._slideShowWindowProxy) {
 				this._map.uiManager.showInfoModal('popup-blocked-modal',
-			_('Windowed Presentation Blocked'),
-			_('Presentation was blocked. Please allow pop-ups in your browser. This lets slide shows to be displayed in separated windows, allowing for easy screen sharing.'), '',
-			_('OK'), null, false);
+					_('Windowed Presentation Blocked'),
+					_('Presentation was blocked. Please allow pop-ups in your browser. This lets slide shows to be displayed in separated windows, allowing for easy screen sharing.'), '',
+					_('OK'), null, false);
 			}
 
+			var popupTitle = _('Windowed Presentation: ') + this._map['wopi'].BaseFileName;
+			this._slideShowWindowProxy.document.title = popupTitle;
+
+			this._slideShowWindowProxy.document.body.style.margin = '0';
+			this._slideShowWindowProxy.document.body.style.padding = '0';
+			this._slideShowWindowProxy.document.body.style.height = '100%';
+			this._slideShowWindowProxy.document.body.style.overflow = 'hidden'; // Prevent scrollbars.
+
+			const iFrame = this._slideShowWindowProxy.document.createElement('iframe');
+			iFrame.src = sanitizeUrl(this._slideURL);
+			iFrame.style.width = '100%';
+			iFrame.style.height = '100%';
+			iFrame.style.border = 'none';
+			this._slideShowWindowProxy.document.body.appendChild(iFrame);
+
+			this._slideShowWindowProxy.document.close();
 			this._slideShowWindowProxy.focus();
-			this._slideShowWindowProxy.addEventListener('keydown', this._onCloseSlideWindow.bind(this));
+
+			this._slideShowWindowProxy.onload = this._handleSlideWindowLoaded.bind(this);
+
+			// this event listener catches keypresses if the user somehow manages to unfocus the iframe
+			this._slideShowWindowProxy.addEventListener('keydown', this._onSlideWindowKeyPress.bind(this));
 
 			var slideShowWindow = this._slideShowWindowProxy;
 			this._map.uiManager.showSnackbar(_('Presenting in window'),
@@ -183,6 +220,15 @@ L.Map.SlideShow = L.Handler.extend({
 		var separator = (this._slideURL.indexOf('?') === -1) ? '?' : '&';
 		this._slideShow.src = this._slideURL + separator + 'StartSlideNumber=' + this._startSlideNumber;
 		this._slideShow.contentWindow.focus();
+	},
+
+	_handleSlideWindowLoaded: function() {
+		const iframe = this._slideShowWindowProxy.document.querySelector('iframe');
+
+		if (iframe) {
+			iframe.contentWindow.focus();
+			iframe.contentWindow.addEventListener('keydown', this._onSlideWindowKeyPress.bind(this));
+		}
 	},
 
 	_processSlideshowLinks: function() {
@@ -236,8 +282,18 @@ L.Map.SlideShow = L.Handler.extend({
 			_('OK'), null, false);
 	},
 
+	_checkPresentationDisabled: function() {
+		return this._map['wopi'].DisablePresentation;
+	},
 
-	_onCloseSlideWindow: function(e) {
+	_notifyPresentationDisabled: function() {
+		this._map.uiManager.showInfoModal('presentation-disabled-modal',
+			_('Presentation disabled'),
+			_('Presentation mode has been disabled for this document'), '',
+			_('OK'), null, false);
+	},
+
+	_onSlideWindowKeyPress: function(e) {
 		if (e.code === 'Escape') {
 			this._slideShowWindowProxy.opener.focus();
 			this._slideShowWindowProxy.close();

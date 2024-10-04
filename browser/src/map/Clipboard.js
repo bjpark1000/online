@@ -13,7 +13,7 @@
  * local & remote clipboard data.
  */
 
-/* global app _ brandProductName $ */
+/* global app DocUtil _ brandProductName $ ClipboardItem Promise GraphicSelection */
 
 // Get all interesting clipboard related events here, and handle
 // download logic in one place ...
@@ -23,6 +23,7 @@ L.Clipboard = L.Class.extend({
 	initialize: function(map) {
 		this._map = map;
 		this._selectionContent = '';
+		this._selectionPlainTextContent = '';
 		this._selectionType = null;
 		this._accessKey = [ '', '' ];
 		this._clipboardSerial = 0; // incremented on each operation
@@ -34,20 +35,41 @@ L.Clipboard = L.Class.extend({
 
 		var div = document.createElement('div');
 		this._dummyDiv = div;
+		this._dummyPlainDiv = null;
 		this._dummyClipboard = {};
 
+		// Tracks waiting for UNO commands to complete
+		this._commandCompletion = [];
+		this._map.on('commandresult', this._onCommandResult, this);
+
 		div.setAttribute('id', this._dummyDivName);
-		div.setAttribute('style', 'user-select: text !important');
+		div.style.userSelect = 'text !important';
 		div.style.opacity = '0';
 		div.setAttribute('contenteditable', 'true');
 		div.setAttribute('type', 'text');
-		div.setAttribute('style', 'position: fixed; left: 0px; top: -200px; width: 15000px; height: 200px; ' +
-				 'overflow: hidden; z-index: -1000, -webkit-user-select: text !important; display: block; ' +
-				 'font-size: 6pt">');
+		div.style.position = 'fixed';
+		div.style.left = '0px';
+		div.style.top = '-200px';
+		div.style.width = '15000px';
+		div.style.height = '200px';
+		div.style.overflow = 'hidden';
+		div.style.zIndex = '-1000';
+		div.style['-webkit-user-select'] = 'text !important';
+		div.style.display = 'block';
+		div.style.fontSize = '6pt';
 
 		// so we get events to where we want them.
 		var parent = document.getElementById('map');
 		parent.appendChild(div);
+
+		if (L.Browser.cypressTest) {
+			this._dummyPlainDiv = document.createElement('div');
+			this._dummyPlainDiv.id = 'copy-plain-container';
+			this._dummyPlainDiv.style = 'position: fixed; left: 0px; top: -400px; width: 15000px; height: 200px; ' +
+				'overflow: hidden; z-index: -1000; -webkit-user-select: text !important; display: block; ' +
+				'font-size: 6pt';
+			parent.appendChild(this._dummyPlainDiv);
+		}
 
 		// sensible default content.
 		this._resetDiv();
@@ -63,20 +85,26 @@ L.Clipboard = L.Class.extend({
 		document.onbeforepaste = beforeSelect;
 	},
 
-	// Attempt to cleanup unwanted elements
-	stripStyle: function(domNode) {
-		var styles = domNode.querySelectorAll('style');
-		for (var i = 0; i < styles.length; i++) {
-			styles[i].parentNode.removeChild(styles[i]);
+	// Decides if `html` effectively contains just an image.
+	isHtmlImage: function(html) {
+		const startsWithMeta = html.substring(0, 5) == '<meta';
+		if (startsWithMeta) {
+			// Ignore leading <meta>.
+			const metaEnd = html.indexOf('>');
+			if (metaEnd != -1) {
+				// Start after '>'.
+				html = html.substring(metaEnd + 1);
+			}
 		}
+
+		// Starts with an <img> element.
+		if (html.substring(0, 4) === '<img') {
+			return true;
+		}
+
+		return false;
 	},
 
-	// We can do a much better job when we fetch text/plain too.
-	stripHTML: function(html) {
-		var tmp = new DOMParser().parseFromString(html, 'text/html').body;
-		this.stripStyle(tmp);
-		return tmp.textContent.trim() || tmp.innerText.trim() || '';
-	},
 
 	setKey: function(key) {
 		if (this._accessKey[0] === key)
@@ -92,6 +120,8 @@ L.Clipboard = L.Class.extend({
 	getMetaPath: function(idx) {
 		if (!idx)
 			idx = 0;
+		if (this._accessKey[idx] === '')
+			return '';
 
 		var metaPath = '/cool/clipboard?WOPISrc=' + encodeURIComponent(this._map.options.doc) +
 			'&ServerId=' + app.socket.WSDServer.Id +
@@ -139,7 +169,7 @@ L.Clipboard = L.Class.extend({
 	// what an empty clipboard has on it
 	_getStubHtml: function() {
 		return this._substProductName(this._originWrapBody(
-		    '    <p>' + _('To paste outside %productName, please first click the \'download\' button') + '</p>\n',
+		    '    <p>' + _('To paste outside {productname}, please first click the \'download\' button') + '</p>\n',
 		    true
 		));
 	},
@@ -316,18 +346,20 @@ L.Clipboard = L.Class.extend({
 				}
 
 				var formData = new FormData();
-				formData.append('data', new Blob([fallbackHtml]), 'clipboard');
+				let commandName = null;
+				if (that._checkAndDisablePasteSpecial()) {
+					commandName = '.uno:PasteSpecial';
+				} else {
+					commandName = '.uno:Paste';
+				}
+				const data = JSON.stringify({
+					url: src,
+					commandName: commandName,
+				});
+				formData.append('data', new Blob([data]), 'clipboard');
 				that._doAsyncDownload(
 					'POST', dest, formData, false,
 					function() {
-						if (that._checkAndDisablePasteSpecial()) {
-							window.app.console.log('up-load of fallback done, now paste special');
-							app.socket.sendMessage('uno .uno:PasteSpecial');
-						} else {
-							window.app.console.log('up-load of fallback done, now paste');
-							app.socket.sendMessage('uno .uno:Paste');
-						}
-
 					}.bind(this),
 					function(progress) { return 50 + progress/2; },
 					function() {
@@ -373,7 +405,7 @@ L.Clipboard = L.Class.extend({
 
 		// for the paste, we always prefer the internal LOK's copy/paste
 		if (preferInternal === true &&
-		    (meta.indexOf(id) >= 0 || meta.indexOf(idOld) >= 0))
+			((id !== '' && meta.indexOf(id) >= 0) || (idOld !== '' && meta.indexOf(idOld) >= 0)))
 		{
 			// Home from home: short-circuit internally.
 			window.app.console.log('short-circuit, internal paste');
@@ -409,9 +441,9 @@ L.Clipboard = L.Class.extend({
 
 		// FIXME: do we want this section ?
 
-		// Images get a look in only if we have no content and are async
-		var htmlImage = htmlText.substring(0, 4) === '<img';
-		if (((content == null && htmlText === '') || htmlImage) && dataTransfer != null)
+		// Images get a look in only if we have no content and are async (used in the Ctrl-V
+		// case)
+		if (((content == null && htmlText === '') || this.isHtmlImage(htmlText)) && dataTransfer != null)
 		{
 			var types = dataTransfer.types;
 
@@ -433,6 +465,11 @@ L.Clipboard = L.Class.extend({
 						this._asyncReadPasteImage(dataTransfer.items[t].getAsFile());
 				}
 			}
+
+			// If any paste special dialog is open, close it here, because we won't call
+			// _doInternalPaste() that would do the closing.
+			this._checkAndDisablePasteSpecial();
+
 			return;
 		}
 
@@ -470,8 +507,7 @@ L.Clipboard = L.Class.extend({
 		if ($('.w2ui-input').is(':focus'))
 			return $('.w2ui-input').value();
 
-		if (this._selectionType === 'complex' ||
-		    this._map._docLayer.hasGraphicSelection()) {
+		if (this._selectionType === 'complex' || GraphicSelection.hasActiveSelection()) {
 			window.app.console.log('Copy/Cut with complex/graphical selection');
 			if (this._selectionType === 'text' && this._selectionContent !== '')
 			{ // back here again having downloaded it ...
@@ -484,7 +520,7 @@ L.Clipboard = L.Class.extend({
 				text = this._getStubHtml();
 				this._onDownloadOnLargeCopyPaste();
 				this._downloadProgress.setURI( // richer, bigger HTML ...
-					this.getMetaURL() + '&MimeType=text/html');
+					this.getMetaURL() + '&MimeType=text/html,text/plain;charset=utf-8');
 			}
 		} else if (this._selectionType === null) {
 			window.app.console.log('Copy/Cut with no selection!');
@@ -500,9 +536,18 @@ L.Clipboard = L.Class.extend({
 	populateClipboard: function(ev) {
 		this._checkSelection();
 
+		if (this._navigatorClipboardWrite()) {
+			// This is the codepath where the browser initiates the clipboard operation,
+			// e.g. the keyboard is used.
+			return true;
+		}
+
 		var text = this._getHtmlForClipboard();
 
-		var plainText = this.stripHTML(text);
+		var plainText = DocUtil.stripHTML(text);
+		if (text == this._selectionContent && this._selectionPlainTextContent != '') {
+			plainText = this._selectionPlainTextContent;
+		}
 		if (ev.clipboardData) { // Standard
 			if (this._unoCommandForCopyCutPaste === '.uno:CopyHyperlinkLocation') {
 				var ess = 's';
@@ -510,7 +555,7 @@ L.Clipboard = L.Class.extend({
 				var match = re.exec(text);
 				if (match !== null && match.length === 6) {
 					text = match[1] + match[3] + match[5];
-					plainText = this.stripHTML(text);
+					plainText = DocUtil.stripHTML(text);
 				}
 			}
 			// if copied content is graphical then plainText is null and it does not work on mobile.
@@ -591,8 +636,18 @@ L.Clipboard = L.Class.extend({
 
 	_resetDiv: function() {
 		// cleanup the content:
-		this._dummyDiv.innerHTML =
-			'<b style="font-weight:normal; background-color: transparent; color: transparent;"><span>&nbsp;&nbsp;</span></b>';
+		this._dummyDiv.replaceChildren();
+
+		let bElement = document.createElement('b');
+		bElement.style.fontWeight = 'normal';
+		bElement.style.backgroundColor = 'transparent';
+		bElement.style.color = 'transparent';
+
+		let span = document.createElement('span');
+		span.textContent = '  ';
+
+		bElement.appendChild(span);
+		this._dummyDiv.appendChild(bElement);
 	},
 
 	// Try-harder fallbacks for emitting cut/copy/paste events.
@@ -624,6 +679,13 @@ L.Clipboard = L.Class.extend({
 		var serial = this._clipboardSerial;
 
 		this._unoCommandForCopyCutPaste = cmd;
+
+		if (operation !== 'paste' && this._navigatorClipboardWrite()) {
+			// This is the codepath where an UNO command initiates the clipboard
+			// operation.
+			return;
+		}
+
 		if (document.execCommand(operation) &&
 			serial !== this._clipboardSerial) {
 			window.app.console.log('copied successfully');
@@ -707,29 +769,36 @@ L.Clipboard = L.Class.extend({
 		}
 	},
 
-	// ClipboardContent.getType() callback
-	_navigatorClipboardGetTypeCallback: function(clipboardContent, blob, type) {
-		var that = this;
+	// ClipboardContent.getType() callback: used with the Paste button
+	_navigatorClipboardGetTypeCallback: async function(clipboardContent, blob, type) {
 		if (type == 'image/png') {
 			this._pasteTypedBlob(type, blob);
 			return;
 		}
 
-		blob.text().then(function(text) {
-			if (type === 'text/html' && text.substring(0, 4) === '<img') {
-				// Got an image, work with that directly.
-				clipboardContent.getType('image/png').then(function(blob) {
-					that._navigatorClipboardGetTypeCallback(clipboardContent, blob, 'image/png');
-				}, function(error) {
-					window.app.console.log('clipboardContent.getType(image/png) failed: ' + error.message);
-				});
-				return;
-			}
-
-			that._navigatorClipboardTextCallback(text, type);
-		}, function(error) {
+		let text;
+		try {
+			text = await blob.text();
+		} catch (error) {
 			window.app.console.log('blob.text() failed: ' + error.message);
-		});
+			return;
+		}
+
+		if (type !== 'text/html' || !this.isHtmlImage(text)) {
+			this._navigatorClipboardTextCallback(text, type);
+			return;
+		}
+
+		// Got an image, work with that directly.
+		let image;
+		try {
+			image = await clipboardContent.getType('image/png');
+		} catch (error) {
+			window.app.console.log('clipboardContent.getType(image/png) failed: ' + error.message);
+			return;
+		}
+
+		this._navigatorClipboardGetTypeCallback(clipboardContent, image, 'image/png');
 	},
 
 	// Clipboard blob text() callback for the text/html and text/plain cases
@@ -756,14 +825,130 @@ L.Clipboard = L.Class.extend({
 		this.paste(ev);
 	},
 
-	// Executes the navigator.clipboard.read() call, if it's available.
-	_navigatorClipboardRead: function(isSpecial) {
-		if (window.app.socket.WSDServer.Options.indexOf('E') === -1) {
-			// Experimental features are disabled, don't try to use navigator.clipboard.
+	// Gets status of a copy/paste command from the remote Kit
+    _onCommandResult: function(e) {
+        if (e.commandName === '.uno:Copy' || e.commandName === '.uno:Cut')
+		{
+			window.app.console.log('Resolve clipboard command promise ' + e.commandName);
+			const that = this;
+			while (that._commandCompletion.length > 0)
+			{
+				let a = that._commandCompletion.shift();
+				a.resolve(a.fetch().then(function(text) {
+					const content = that.parseClipboard(text)[a.shorttype];
+					const blob = new Blob([content], { 'type': a.mimetype });
+					console.log('Generate blob of type ' + a.mimetype + ' from ' +a.shorttype + ' text: ' +content);
+					return blob;
+				}));
+			}
+		}
+	},
+
+	// Executes the navigator.clipboard.write() call, if it's available.
+	_navigatorClipboardWrite: function() {
+		if (!L.Browser.hasNavigatorClipboardWrite) {
+			// Show a visible warning, this should not happen in production.
+			this._map.uiManager.showSnackbar(
+				_('The async Clipboard API is not supported by your browser, switching to HTTPS is meant to fix that.')
+			);
 			return false;
 		}
 
-		if (navigator.clipboard.read === undefined) {
+		if (this._selectionType !== 'text') {
+			return false;
+		}
+
+		const command = this._unoCommandForCopyCutPaste;
+		app.socket.sendMessage('uno ' + command);
+
+		// This is sent down the websocket URL which can race with the
+		// web fetch - so first step is to wait for the result of
+		// that command so we are sure the clipboard is set before
+		// fetching it.
+
+		const that = this;
+
+		if (that._commandCompletion.length > 0)
+			window.app.console.error('Already have ' + that._commandCompletion.length +
+						 ' pending clipboard command(s)');
+
+		const url = that.getMetaURL() + '&MimeType=text/html,text/plain;charset=utf-8';
+
+		// Share a single fetch
+		var fetchPromise = function() {
+			return new Promise((resolve, reject) => {
+				try {
+					var result = fetch(url).then(response => response.text());
+					resolve(result);
+				} catch (err) {
+					reject(err);
+				}
+			});
+		};
+
+		var awaitPromise = function(url, mimetype, shorttype) {
+			return new Promise((resolve, reject) => {
+				window.app.console.log('New ' + command + ' promise');
+				// FIXME: add a timeout cleanup too ...
+				that._commandCompletion.push({ fetch: fetchPromise, command: command,
+							       resolve: resolve, reject: reject,
+							       mimetype: mimetype, shorttype: shorttype});
+		}); };
+
+		const text = new ClipboardItem({
+			'text/html': awaitPromise(url, 'text/html', 'html'),
+			'text/plain': awaitPromise(url, 'text/plain', 'plain')
+		});
+		let clipboard = navigator.clipboard;
+		if (L.Browser.cypressTest) {
+			clipboard = this._dummyClipboard;
+		}
+		clipboard.write([text]).then(function() {
+		}, function(error) {
+			window.app.console.log('navigator.clipboard.write() failed: ' + error.message);
+
+			// Warn that the copy failed.
+			that._warnCopyPaste();
+			// Once broken, always broken.
+			L.Browser.hasNavigatorClipboardWrite = false;
+			window.prefs.set('hasNavigatorClipboardWrite', false);
+			// Prefetch selection, so next time copy will work with the keyboard.
+			app.socket.sendMessage('gettextselection mimetype=text/html,text/plain;charset=utf-8');
+		});
+
+		return true;
+	},
+
+	// Parses the result from the clipboard endpoint into HTML and plain text.
+	parseClipboard: function(text) {
+		let textHtml;
+		let textPlain = '';
+		if (text.startsWith('{')) {
+			let textJson = JSON.parse(text);
+			textHtml = textJson['text/html'];
+			textPlain = textJson['text/plain;charset=utf-8'];
+		} else {
+			var idx = text.indexOf('<!DOCTYPE HTML');
+			if (idx === -1) {
+				idx = text.indexOf('<!DOCTYPE html');
+			}
+			if (idx > 0)
+				text = text.substring(idx, text.length);
+			textHtml = text;
+		}
+
+		if (!app.sectionContainer.testing)
+			textHtml = DocUtil.stripStyle(textHtml);
+
+		return {
+			'html': textHtml,
+			'plain': textPlain
+		};
+	},
+
+	// Executes the navigator.clipboard.read() call, if it's available.
+	_navigatorClipboardRead: function(isSpecial) {
+		if (!L.Browser.hasNavigatorClipboardRead) {
 			return false;
 		}
 
@@ -793,12 +978,13 @@ L.Clipboard = L.Class.extend({
 	// Pull UNO clipboard commands out from menus and normal user input.
 	// We try to massage and re-emit these, to get good security event / credentials.
 	filterExecCopyPaste: function(cmd) {
-		if (window.ThisIsAMobileApp) {
-			// We do native copy/paste in the iOS and Android cases
-			return false;
+		if (this._map['wopi'].DisableCopy && (cmd === '.uno:Copy' || cmd === '.uno:Cut')) {
+			// perform internal operations
+			app.socket.sendMessage('uno ' + cmd);
+			return true;
 		}
 
-		if (this._map['wopi'].DisableCopy && (cmd === '.uno:Copy' || cmd === '.uno:Cut')) {
+		if (window.ThisIsAMobileApp) {
 			// perform internal operations
 			app.socket.sendMessage('uno ' + cmd);
 			return true;
@@ -836,7 +1022,7 @@ L.Clipboard = L.Class.extend({
 		if (this._map['wopi'].DisableCopy === true)
 		{
 			var text = this._getDisabledCopyStubHtml();
-			var plainText = this.stripHTML(text);
+			var plainText = DocUtil.stripHTML(text);
 			if (ev.clipboardData) {
 				window.app.console.log('Copying disabled: put stub message on the clipboard');
 				ev.clipboardData.setData('text/plain', plainText ? plainText: ' ');
@@ -913,18 +1099,26 @@ L.Clipboard = L.Class.extend({
 
 	clearSelection: function() {
 		this._selectionContent = '';
+		this._selectionPlainTextContent = '';
 		this._selectionType = null;
 		this._scheduleHideDownload();
 	},
 
 	// textselectioncontent: message
-	setTextSelectionHTML: function(html) {
+	setTextSelectionHTML: function(html, plainText = '') {
 		this._selectionType = 'text';
 		this._selectionContent = html;
+		this._selectionPlainTextContent = plainText;
 		if (L.Browser.cypressTest) {
 			this._dummyDiv.innerHTML = html;
+			this._dummyPlainDiv.innerText = plainText;
 		}
 		this._scheduleHideDownload();
+	},
+
+	// Sets the selection type without having the selection content (async clipboard).
+	setTextSelectionType: function(selectionType) {
+		this._selectionType = selectionType;
 	},
 
 	// sets the selection to some (cell formula) text)
@@ -939,6 +1133,7 @@ L.Clipboard = L.Class.extend({
 		}
 		this._selectionType = 'text';
 		this._selectionContent = this._originWrapBody(text);
+		this._selectionPlainTextContent = text;
 		this._scheduleHideDownload();
 	},
 
@@ -989,31 +1184,72 @@ L.Clipboard = L.Class.extend({
 	},
 
 	_warnCopyPaste: function() {
-		var msg;
-		if (window.mode.isMobile() || window.mode.isTablet()) {
-			msg = _('<p>Please use the copy/paste buttons on your on-screen keyboard.</p>');
-		} else {
-			msg = _('<p>Your browser has very limited access to the clipboard, so use these keyboard shortcuts:</p><table class="warn-copy-paste"><tr><td><kbd>Ctrl</kbd><span class="kbd--plus">+</span><kbd>C</kbd></td><td><kbd>Ctrl</kbd><span class="kbd--plus">+</span><kbd>X</kbd></td><td><kbd>Ctrl</kbd><span class="kbd--plus">+</span><kbd>V</kbd></td></tr><tr><td>Copy</td><td>Cut</td><td>Paste</td></tr></table>');
-			msg = L.Util.replaceCtrlAltInMac(msg);
-		}
-
 		var id = 'copy_paste_warning';
 		this._map.uiManager.showYesNoButton(id + '-box', '', '', _('OK'), null, null, null, true);
 		var box = document.getElementById(id + '-box');
 		var innerDiv = L.DomUtil.create('div', '', null);
 		box.insertBefore(innerDiv, box.firstChild);
-		innerDiv.innerHTML = msg;
+
+		if (window.mode.isMobile() || window.mode.isTablet()) {
+			const p = document.createElement('p');
+			p.textContent = _('Please use the paste buttons on your on-screen keyboard.');
+			innerDiv.appendChild(p);
+		}
+		else {
+			const ctrlText = L.Util.replaceCtrlAltInMac('Ctrl');
+			const p = document.createElement('p');
+			p.textContent = 'Your browser has very limited access to the clipboard, so use these keyboard shortcuts:';
+			innerDiv.appendChild(p);
+
+			const table = document.createElement('table');
+			table.className = 'warn-copy-paste';
+			innerDiv.appendChild(table);
+
+			let row = document.createElement('tr');
+			table.appendChild(row);
+
+			// Add three cells for copy & cut & paste.
+			for (let i = 0; i < 3; i++) {
+				const cell = document.createElement('td');
+				row.appendChild(cell);
+
+				let kbd = document.createElement('kbd');
+				kbd.textContent = ctrlText;
+				cell.appendChild(kbd);
+
+				const span = document.createElement('span');
+				span.textContent = '+';
+				span.className = 'kbd--plus';
+				cell.appendChild(span);
+
+				kbd = document.createElement('kbd');
+				kbd.textContent = i === 0 ? 'C': (i === 1 ? 'X': 'V');
+				cell.appendChild(kbd);
+			}
+
+			// Add table headers as second row.
+			row = document.createElement('tr');
+			table.appendChild(row);
+			for (let i = 0; i < 3; i++) {
+				const cell = document.createElement('td');
+				cell.textContent = i === 0 ? 'Copy': (i === 1 ? 'Cut': 'Paste');
+				row.appendChild(cell);
+			}
+		}
 	},
 
 	_substProductName: function (msg) {
 		var productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Collabora Online Development Edition (unbranded)';
-		return msg.replace('%productName', productName);
+		return msg.replace('{productname}', productName);
 	},
 
 	_warnLargeCopyPasteAlreadyStarted: function () {
 		this._map.uiManager.showInfoModal('large copy paste started warning');
-		document.getElementById('large copy paste started warning').innerHTML = _('<p>A download due to a large copy/paste operation has already started. ' +
-		'Please, wait for the current download or cancel it before starting a new one</p>');
+		const container = document.getElementById('large copy paste started warning');
+		container.replaceChildren();
+		const p = document.createElement('p');
+		p.textContent = _('A download due to a large copy/paste operation has already started. Please, wait for the current download or cancel it before starting a new one');
+		container.appendChild(p);
 	},
 
 	isPasteSpecialDialogOpen: function() {
@@ -1030,18 +1266,49 @@ L.Clipboard = L.Class.extend({
 	},
 
 	_openPasteSpecialPopup: function () {
-		var msg = _('<p>Your browser has very limited access to the clipboard</p><p>Please press now: <kbd>Ctrl</kbd><span class="kbd--plus">+</span><kbd>V</kbd> to see more options</p><p>Close popup to ignore paste special</p>');
-		msg = L.Util.replaceCtrlAltInMac(msg);
-
 		// We will use this for closing the dialog.
 		this.pasteSpecialDialogId = this._map.uiManager.generateModalId('paste_special_dialog') + '-box';
 
 		var id = 'paste_special_dialog';
-		this._map.uiManager.showYesNoButton(id + '-box', '', '', _('OK'), null, null, null, true);
+		this._map.uiManager.showYesNoButton(id + '-box', /*title=*/'', /*message=*/'', /*yesButtonText=*/_('Paste from this document'), /*noButtonText=*/_('Cancel paste special'), /*yesFunction=*/function() {
+			app.socket.sendMessage('uno .uno:PasteSpecial');
+		}, /*noFunction=*/null, /*cancellable=*/true);
 		var box = document.getElementById(id + '-box');
 		var innerDiv = L.DomUtil.create('div', '', null);
 		box.insertBefore(innerDiv, box.firstChild);
-		innerDiv.innerHTML = msg;
+
+		const ctrlText = L.Util.replaceCtrlAltInMac('Ctrl');
+
+		let p = document.createElement('p');
+		p.textContent = _('Your browser has very limited access to the clipboard');
+		innerDiv.appendChild(p);
+		p = document.createElement('p');
+		innerDiv.appendChild(p);
+		const bold = document.createElement('b');
+		bold.textContent = _('Please use following combination to see more options:');
+		p.appendChild(bold);
+
+		p = document.createElement('p');
+		innerDiv.appendChild(p);
+		let kbd = document.createElement('kbd');
+		kbd.textContent = ctrlText;
+		p.appendChild(kbd);
+		const span = document.createElement('span');
+		span.className = 'kbd--plus';
+		span.textContent = '+';
+		p.appendChild(span);
+		kbd = document.createElement('kbd');
+		kbd.textContent = 'V';
+		p.appendChild(kbd);
+
+		p = document.createElement('p');
+		innerDiv.appendChild(p);
+		p.textContent = _('Close popup to ignore paste special');
+
+		// Drop the not wanted whitespace between the dialog body and the button row at the
+		// bottom.
+		var label = document.getElementById('modal-dialog-' + id + '-box-label');
+		label.style.display = 'none';
 	},
 
 	// Check if the paste special mode is enabled, and if so disable it.

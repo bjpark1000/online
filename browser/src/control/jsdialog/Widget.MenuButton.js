@@ -23,54 +23,7 @@
  * }
  */
 
-/* global JSDialog $ */
-
-function _makeW2MenuFocusable(id, control, menu) {
-	var element = document.getElementById(id);
-	var rows = element.getElementsByTagName('tr');
-	rows = Array.from(rows);
-
-	if (rows.length > 0) {
-		var tabStartIndex = 1000; // Shouldn't be 0 (zero).
-		// Loop focus inside menu - start.
-		var parentNode = rows[0].parentNode;
-		var trBegin = document.createElement('tr');
-		trBegin.tabIndex = tabStartIndex - 1;
-		trBegin.id = id + '-beginning';
-		parentNode.insertBefore(trBegin, parentNode.children[0]);
-
-		var trEnd = document.createElement('tr');
-		trEnd.id = id + '-ending';
-		trEnd.tabIndex = tabStartIndex + rows.length;
-		parentNode.appendChild(trEnd);
-
-		trBegin.addEventListener('focusin', function() {
-			rows[rows.length - 1].focus();
-		});
-
-		trEnd.addEventListener('focusin', function() {
-			rows[0].focus();
-		});
-		// Loop focus inside menu - end.
-
-		trEnd.focus();
-
-		rows.forEach(function(row, index) {
-			if (!menu[index].type || (menu[index].type !== 'break' && menu[index].type !== 'separator'))
-				row.tabIndex = index + tabStartIndex;
-
-			row.addEventListener('keydown', function(event) {
-				var elementToHide = document.getElementById(id);
-				if (event.code === 'Escape') {
-					if (elementToHide) {
-						elementToHide.style.display = 'none';
-						control.button.focus();
-					}
-				}
-			});
-		});
-	}
-}
+/* global JSDialog $ app */
 
 function _menubuttonControl (parentContainer, data, builder) {
 	var ids;
@@ -91,56 +44,109 @@ function _menubuttonControl (parentContainer, data, builder) {
 
 	// import menu
 	if (data.menu) {
+		// command is needed to generate image
+		if (!data.command)
+			data.command = data.id;
+
 		menuId = data.id + '-menu';
-		builder._menus[menuId] = [];
-		for (var i in data.menu) {
-			builder._menus[menuId].push({
-				id: data.menu[i].id,
-				text: data.menu[i].text
-			});
-		}
+		var builtMenu = [];
+		for (var i in data.menu)
+			builtMenu.push(data.menu[i]);
+		builder._menus.set(menuId, builtMenu);
 	}
 
-	if (menuId && builder._menus[menuId]) {
+	var menuEntries = menuId ? builder._menus.get(menuId) : null;
+
+	if (menuEntries) {
 		var noLabels = builder.options.noLabelsForUnoButtons;
-		builder.options.noLabelsForUnoButtons = false;
+		builder.options.noLabelsForUnoButtons = data.noLabel ? data.noLabel : false;
 
 		// command is needed to generate image
 		if (!data.command)
 			data.command = menuId;
 
-		var options = {hasDropdownArrow: true};
+		var options = {hasDropdownArrow: menuEntries.length > 1};
 		var control = builder._unoToolButton(parentContainer, data, builder, options);
 
-		$(control.container).tooltip({disabled: true});
 		$(control.container).addClass('menubutton');
+		control.container.setAttribute('aria-haspopup', true);
 
-		$(control.container).unbind('click');
-		$(control.container).click(function () {
+		$(control.button).unbind('click');
+		$(control.label).unbind('click');
+
+		var dropdownId = data.id;
+		var clickFunction = function () {
 			if (control.container.hasAttribute('disabled'))
 				return;
-			$(control.container).w2menu({
-				items: builder._menus[menuId],
-				onSelect: function (event) {
-					if (event.item.uno)
-						builder.map.sendUnoCommand('.uno:' + event.item.uno);
-					else if (event.item.type === 'action')
-						builder.map.dispatch(event.item.id);
-					else
-						builder.callback('menubutton', 'select', control.container, event.item.id, builder);
+
+			var callback = function(objectType, eventType, object, data, entry) {
+				if ((eventType === 'selected' && entry.items) || eventType === 'showsubmenu') {
+					return true;
+				} else if (eventType === 'selected' && entry.uno) {
+					var uno = (entry.uno.indexOf('.uno:') === 0) ? entry.uno : '.uno:' + entry.uno;
+					builder.map.sendUnoCommand(uno);
+					JSDialog.CloseDropdown(dropdownId);
+					return true;
+				} else if (eventType === 'selected' && entry.action) {
+					app.dispatcher.dispatch(entry.action);
+					JSDialog.CloseDropdown(dropdownId);
+					return true;
+				} else if (eventType === 'selected') {
+					builder.callback('menubutton', 'select', control.container, entry.id, builder);
+					JSDialog.CloseDropdown(dropdownId);
+					return true;
 				}
-			});
-			_makeW2MenuFocusable('w2ui-overlay', control, builder._menus[menuId]);
-		});
+
+				return false;
+			};
+
+			var freshMenu = builder._menus.get(menuId); // refetch to apply dynamic changes
+			if (freshMenu.length && freshMenu[0].type === 'colorpicker') {
+				// make copy and fill with information to identify color command
+				freshMenu = JSON.parse(JSON.stringify(freshMenu));
+				freshMenu[0].command = data.command;
+				freshMenu[0].id = data.id;
+			}
+
+			if (freshMenu.length === 1) {
+				callback(null, 'selected', null, null, freshMenu[0]);
+			} else {
+				JSDialog.OpenDropdown(dropdownId, control.container, freshMenu, callback);
+			}
+		};
+
+		var isSplitButton = data.applyCallback;
+
+		// make it possible to setup separate callbacks for split button
+		if (isSplitButton) {
+			JSDialog.AddOnClick(control.button, data.applyCallback);
+			if (control.label)
+				JSDialog.AddOnClick(control.label, data.applyCallback);
+			if (control.arrow)
+				control.arrow.tabIndex = 0;
+		} else {
+			JSDialog.AddOnClick(control.button, clickFunction);
+			if (control.label)
+				JSDialog.AddOnClick(control.label, clickFunction);
+		}
+
+		if (control.arrow)
+			JSDialog.AddOnClick(control.arrow, clickFunction);
+
+		builder._preventDocumentLosingFocusOnClick(control.container);
 
 		builder.options.noLabelsForUnoButtons = noLabels;
+
+		return control;
 	} else if (data.text !== undefined || data.image) {
 		var button = L.DomUtil.create('button', 'menubutton ' + builder.options.cssClass, parentContainer);
 		button.id = data.id;
+		button.title = data.text;
 		button.setAttribute('aria-haspopup', true);
 		if (data.image) {
 			var image = L.DomUtil.create('img', '', button);
 			image.src = data.image;
+			image.setAttribute('alt', '');
 		}
 		var label = L.DomUtil.create('span', '', button);
 		label.innerText = data.text ? data.text : '';
@@ -153,7 +159,7 @@ function _menubuttonControl (parentContainer, data, builder) {
 		});
 
 		if (data.enabled === false)
-			button.setAttribute('disabled', '');
+			button.disabled = true;
 	} else {
 		window.app.console.warn('Not found menu "' + menuId + '"');
 	}

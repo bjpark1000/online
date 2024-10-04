@@ -24,7 +24,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
-			<string>Owner</string>
+			<string>Default</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>org.oasis-open.opendocument.text</string>
@@ -36,7 +36,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
-			<string>Default</string>
+			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>com.collabora.office.uti.fodt</string>
@@ -93,7 +93,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
-			<string>Owner</string>
+			<string>Default</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>org.oasis-open.opendocument.spreadsheet</string>
@@ -134,7 +134,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
-			<string>Owner</string>
+			<string>Default</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>org.oasis-open.opendocument.presentation</string>
@@ -189,7 +189,7 @@
 			<key>CFBundleTypeName</key>
 			<string>PDF Document</string>
 			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
+			<string>Viewer</string>
 			<key>LSHandlerRank</key>
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
@@ -249,7 +249,7 @@
 	     CFBundleShortVersionString must, however, be three numbers.
 	-->
 	<key>CFBundleShortVersionString</key>
-	<string>23.05.8</string>
+	<string>24.04.8</string>
 	<key>CFBundleVersion</key>
 	<string>@IOSAPP_BUNDLE_VERSION@</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -260,6 +260,24 @@
 	<string>$(PRODUCT_NAME) requires access to the camera in order for you to be able to take photos to be inserted while editing a document.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>$(PRODUCT_NAME) requires access to the photo library in order for you to be able to insert images into documents.</string>
+	<key>NSPrivacyAccessedAPITypeReasons</key>
+	<array>
+		<string>AC6B.1</string><!-- Allow reading com.apple.configuration.managed preferences (to use username if it is set in a profile) -->
+		<string>35F9.1</string><!-- Allow reading boot time to use timers -->
+		<string>3B52.1</string><!-- Allow reading file metadata when the user opens a file in Collabora Mobile -->
+	</array>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.com.collabora.office.Mobile</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key>
+			<string>Any</string>
+			<key>NSUbiquitousContainerName</key>
+			<string>@APP_NAME@</string>
+		</dict>
+	</dict>
 	<key>UIAppFonts</key>
 	<array>
 		<string>share/fonts/truetype/Alef-Bold.ttf</string>

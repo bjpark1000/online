@@ -1,47 +1,66 @@
-/* global describe it cy beforeEach expect require afterEach */
+/* global describe it cy beforeEach expect require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 var desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test jumping on large cell selection', function() {
-	var testFileName = 'cell_cursor.ods';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'calc');
+		helper.setupAndLoadDocument('calc/cell_cursor.ods');
 		desktopHelper.switchUIToCompact();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#tb_editbar_item_sidebar').click();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
+		cy.cGet('#sidebar').click({force: true});
 	});
 
 	it('No jump on long merged cell', function() {
-		desktopHelper.assertScrollbarPosition('horizontal', 310, 315);
+		desktopHelper.assertScrollbarPosition('horizontal', 205, 315);
 		calcHelper.clickOnFirstCell(true, false, false);
-		cy.cGet('input#addressInput').should('have.prop', 'value', 'A1:Z1');
-		desktopHelper.assertScrollbarPosition('horizontal', 310, 315);
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'A1:Z1');
+		desktopHelper.assertScrollbarPosition('horizontal', 205, 315);
+	});
+
+	it('Jump on address with not visible cursor', function() {
+		desktopHelper.assertScrollbarPosition('vertical', 0, 30);
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'Z11');
+
+		cy.cGet('input#addressInput-input').type('{selectAll}A110{enter}');
+		desktopHelper.assertScrollbarPosition('vertical', 205, 315);
+	});
+
+	it('Jump on search with not visible cursor', function() {
+		desktopHelper.assertScrollbarPosition('horizontal', 205, 315);
+		cy.cGet('input#search-input').clear().type('FIRST{enter}');
+
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'A10');
+		desktopHelper.assertScrollbarPosition('horizontal', 40, 60);
+	});
+
+	it('Show cursor on sheet insertion', function() {
+		// scroll down
+		cy.cGet('input#addressInput-input').type('{selectAll}A110{enter}');
+		desktopHelper.assertScrollbarPosition('vertical', 205, 315);
+
+		// insert sheet before
+		calcHelper.selectOptionFromContextMenu('Insert sheet before this');
+
+		// we should see the top left corner of the sheet
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'A1');
+		desktopHelper.assertScrollbarPosition('vertical', 0, 30);
 	});
 });
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test jumping on large cell selection with split panes', function() {
-	var testFileName = 'cell_cursor_split.ods';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'calc');
+		helper.setupAndLoadDocument('calc/cell_cursor_split.ods');
 		desktopHelper.switchUIToCompact();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#tb_editbar_item_sidebar').click();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
+		cy.cGet('#sidebar').click({force: true});
 	});
 
 	it('No jump on long merged cell with split panes', function() {
-		desktopHelper.assertScrollbarPosition('horizontal', 380, 390);
+		desktopHelper.assertScrollbarPosition('horizontal', 270, 390);
 
 		// Click on second cell in second row
 		cy.cGet('#map')
@@ -52,7 +71,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test jumping on large cell
 			cy.cGet('body').click(XPos, YPos);
 		});
 
-		cy.cGet('input#addressInput').should('have.prop', 'value', 'B2:AA2');
-		desktopHelper.assertScrollbarPosition('horizontal', 380, 390);
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'B2:AA2');
+		desktopHelper.assertScrollbarPosition('horizontal', 270, 390);
 	});
 });

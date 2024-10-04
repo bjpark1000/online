@@ -27,6 +27,19 @@
 #include <TraceFile.hpp>
 #include <wsd/TileDesc.hpp>
 
+#include <iostream>
+#include <fstream>
+#include <ctime>
+#include <Util.hpp>
+#include <common/Log.hpp>
+
+struct PerfMetricInfo
+{
+    std::string phase;
+    std::string metric;
+    size_t data;
+};
+
 // store buckets of latency
 struct Histogram {
     const size_t incLowMs = 10;
@@ -81,6 +94,35 @@ struct Histogram {
             std::cout << "< " << std::setw(4) << ms << " ms |" << std::string(chrs, '-') << "| " << _buckets[i] << "\n";
         }
     }
+
+    std::vector<PerfMetricInfo> getLatencyStats(std::string typeOfLatency, const std::string& testPhase)
+    {
+        size_t totalTiles = _items;
+        size_t subTenCount = _buckets[0];
+        size_t subOneHundredCount = 0;
+        size_t overOneHundredCount = _tooLong;
+
+        for(size_t i = 1 ; i < _buckets.size(); i++)
+        {
+            if(i < 10)
+            {
+                subOneHundredCount += _buckets[i];
+            }
+            else
+            {
+                overOneHundredCount += _buckets[i];
+            }
+        }
+
+        std::vector<PerfMetricInfo> latencyStatsList;
+        latencyStatsList.push_back(PerfMetricInfo {testPhase, typeOfLatency + " Total tiles", totalTiles});
+        latencyStatsList.push_back(PerfMetricInfo {testPhase, typeOfLatency + " Sub_10ms", subTenCount});
+        latencyStatsList.push_back(PerfMetricInfo {testPhase, typeOfLatency + " Sub_100ms", subOneHundredCount});
+        latencyStatsList.push_back(PerfMetricInfo {testPhase, typeOfLatency + " Over_100ms", overOneHundredCount});
+
+        return latencyStatsList;
+    }
+
 };
 
 struct Stats {
@@ -91,14 +133,24 @@ struct Stats {
         _tileCount(0),
         _connections(0)
     {
+        _startUpMemoryUsage = getMemoryUsage();
+        _timer.reset(new Util::SysStopwatch());
+        _peakMemoryUsage = 0;
     }
     std::chrono::steady_clock::time_point _start;
+    std::unique_ptr<Util::SysStopwatch> _timer;
     size_t _bytesSent;
     size_t _bytesRecvd;
     size_t _tileCount;
     size_t _connections;
     Histogram _pingLatency;
     Histogram _tileLatency;
+
+    size_t _peakMemoryUsage;
+    size_t _startUpMemoryUsage;
+
+
+    std::string _testType;
 
     // message size breakdown
     struct MessageStat {
@@ -107,6 +159,30 @@ struct Stats {
     };
     std::unordered_map<std::string, MessageStat> _recvd;
     std::unordered_map<std::string, MessageStat> _sent;
+
+    std::vector<PerfMetricInfo> _perfStatsList;
+
+    size_t getMemoryUsage()
+    {
+        std::ifstream smapsFile("/proc/" + std::to_string(getpid()) + "/smaps");
+
+        std::string line;
+        size_t totalDirtyPss = 0;
+
+        while (std::getline(smapsFile, line))
+        {
+            if (line.find("Private_Dirty:") == 0)
+            {
+                std::stringstream ss(line);
+                std::string key;
+                size_t value;
+                ss >> key >> value;
+                totalDirtyPss += value;
+            }
+        }
+
+        return totalDirtyPss;
+    }
 
     void accumulate(std::unordered_map<std::string, MessageStat> &map,
                     const std::string token, size_t size)
@@ -163,6 +239,8 @@ struct Stats {
     {
         const auto now = std::chrono::steady_clock::now();
         const size_t runMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - _start).count();
+
+        std::cout << "Peak memory usage: " << _peakMemoryUsage << "kB";
         std::cout << "Stress run took " << runMs << " ms\n";
         std::cout << "  tiles: " << _tileCount << " => TPS: " << ((_tileCount * 1000.0)/runMs) << "\n";
         _pingLatency.dump("ping latency:");
@@ -174,12 +252,117 @@ struct Stats {
             " server sent " << Util::getHumanizedBytes(_bytesRecvd) <<
             " (" << recvKbps << " kB/s) to " << _connections << " connections.\n";
 
+
+       endPhase(Log::Phase::Edit);
+       dumpPerfStatsToCSV(_perfStatsList);
+
         std::cout << "we sent:\n";
         dumpMap(_sent);
 
         std::cout << "server sent us:\n";
         dumpMap(_recvd);
     }
+
+
+    void endPhase(Log::Phase phase)
+    {
+        std::string phaseAsString = Log::toStringShort(phase);
+
+        const auto now = std::chrono::steady_clock::now();
+        const size_t runMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - _start).count();
+        _start = std::chrono::steady_clock::now();
+
+        size_t cpuTime = _timer->elapsedTime().count();
+        _timer.reset(new Util::SysStopwatch);
+
+        _perfStatsList.push_back(getStressStats(runMs, phaseAsString));
+        _perfStatsList.push_back(getCPUUSageStats(cpuTime, phaseAsString));
+
+        if(phase == Log::Phase::Edit)
+        {
+            std::vector<PerfMetricInfo> statsList;
+
+            _perfStatsList.push_back(getPeakMemoryUsageStats(_peakMemoryUsage, phaseAsString));
+
+            statsList = getNetworkStats(_bytesRecvd / 1000, _bytesSent / 1000, phaseAsString);
+            for(size_t i = 0; i < statsList.size(); i++)
+            {
+                _perfStatsList.push_back(statsList[i]);
+            }
+
+            statsList = _pingLatency.getLatencyStats("PL", phaseAsString);
+            for(size_t i = 0; i < statsList.size(); i++)
+            {
+                _perfStatsList.push_back(statsList[i]);
+            }
+
+            statsList = _tileLatency.getLatencyStats("TL", phaseAsString);
+            for(size_t i = 0; i < statsList.size(); i++)
+            {
+                _perfStatsList.push_back(statsList[i]);
+            }
+        }
+    }
+
+    PerfMetricInfo getStressStats(size_t runMs, const std::string& testPhase)
+    {
+        PerfMetricInfo stressStats = {testPhase, "Stress run (ms)", runMs};
+        return  stressStats;
+    }
+
+    PerfMetricInfo getCPUUSageStats(size_t cpuUsage, const std::string testPhase)
+    {
+        PerfMetricInfo cpuStats = {testPhase, "CPU Usage (us)", cpuUsage};
+        return cpuStats;
+    }
+
+    std::vector<PerfMetricInfo> getNetworkStats(size_t recievedKb, size_t sentKb, const std::string& testPhase)
+    {
+        std::vector<PerfMetricInfo> networkStatsList;
+
+        networkStatsList.push_back(PerfMetricInfo{testPhase, "Bytes recieved (kB)", recievedKb});
+        networkStatsList.push_back(PerfMetricInfo{testPhase, "Bytes sent (kB)", sentKb});
+
+        return networkStatsList;
+    }
+
+    PerfMetricInfo getPeakMemoryUsageStats(size_t peakMemory, const std::string& testPhase)
+    {
+        PerfMetricInfo peakMemoryStats = {testPhase, "Peak memory usage (kB)", peakMemory};
+        return peakMemoryStats;
+    }
+
+    void dumpPerfStatsToCSV(std::vector<PerfMetricInfo> perfData)
+    {
+        std::ofstream file("PerformanceMetricsSummary.csv", std::ios::out | std::ios::app);
+
+        if(file.tellp() == 0)
+        {
+            file << "Commit Hash" << "," << "Date" << "," << "Test" << "," << "Phase" << "," << "Metric" << "," << "Value";
+            file << "\n";
+        }
+
+        std::string commitHash = Util::getCoolVersionHash();
+
+        time_t now = time(0);
+        struct tm datetime;
+        localtime_r(&now, &datetime);
+
+        char formattedDate[50];
+        strftime(formattedDate, 50, "%d/%m/%y", &datetime);
+
+        for(size_t i = 0; i < perfData.size(); i++)
+        {
+            file << commitHash << "," << formattedDate << "," << _testType << "," << perfData[i].phase << "," << perfData[i].metric << "," << perfData[i].data;
+            file << "\n";
+        }
+    }
+
+    void setTypeOfTest(const std::string& testType)
+    {
+        _testType = testType;
+    }
+
 };
 
 // Avoid a MessageHandler for now.
@@ -328,7 +511,11 @@ public:
         std::string out = msg;
 
         if (tokens.equals(0, "tileprocessed"))
-            out = ""; // we do this accurately below
+            out.clear(); // we do this accurately below
+        else if (tokens.equals(0, "requestloksession") || (tokens.equals(0, "canceltiles")))
+            out.clear(); // These commands have been removed.
+        else if (tokens.equals(0, "uno .uno:Save"))
+            out = "save dontTerminateEdit=0 dontSaveIfUnmodified=1"; // .uno:Save will crash in debug
 
         else if (tokens.equals(0, "load")) {
             std::string url = tokens[1];
@@ -341,6 +528,15 @@ public:
             std::cerr << _logPre << "msg " << out << "\n";
         }
 
+        size_t currentMemoryUsage = _stats->getMemoryUsage();
+        if (currentMemoryUsage > _stats->_startUpMemoryUsage)
+        {
+            size_t postDocumentLoadingMemory = currentMemoryUsage - _stats->_startUpMemoryUsage;
+            if (postDocumentLoadingMemory > _stats->_peakMemoryUsage)
+            {
+                _stats->_peakMemoryUsage = postDocumentLoadingMemory;
+            }
+        }
         // FIXME: translate mouse events relative to view-port etc.
         return out;
     }
@@ -397,7 +593,7 @@ public:
                 return;
             }
             else
-                Util::forcedExit(EX_SOFTWARE);
+                Util::forcedExit(70);
         }
 
         // FIXME: implement code to send new view-ports based

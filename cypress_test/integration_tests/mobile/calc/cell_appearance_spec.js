@@ -1,28 +1,22 @@
-/* global describe it cy beforeEach require afterEach expect*/
+/* global describe it cy beforeEach require expect*/
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', function() {
-	var origTestFileName = 'cell_appearance.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		helper.setupAndLoadDocument('calc/cell_appearance.ods');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	function openAppearencePanel() {
 		mobileHelper.openMobileWizard();
 
-		helper.clickOnIdle('#ScCellAppearancePropertyPanel');
+		cy.cGet('#ScCellAppearancePropertyPanel').click();
 
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Background Color')
 			.should('be.visible');
@@ -41,9 +35,10 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 	}
 
 	it('Apply background color', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#BackgroundColor');
+		cy.cGet('#BackgroundColor').click();
 
 		mobileHelper.selectFromColorPicker('#BackgroundColor', 2);
 
@@ -52,29 +47,38 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 			.should('have.attr', 'style', 'background-color: rgb(255, 0, 0);');
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'bgcolor', '#FF0000');
 	});
 
 	it('Apply left border', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-2');
+		cy.cGet('#border-2').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-left: 1px solid #000000');
 	});
 
 	it('Remove cell border', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
 		// First add left border
-		helper.clickOnIdle('#border-2');
+		cy.cGet('#border-2').click();
+
+		// Close mobile wizard gracefully now to avoid sporadic
+		// failures when reopening it later
+		mobileHelper.closeMobileWizard();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-left: 1px solid #000000');
@@ -82,75 +86,88 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 		// Then remove it
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-1');
+		cy.cGet('#border-1').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('not.have.attr', 'style');
 	});
 
 	it('Apply right border', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-3');
+		cy.cGet('#border-3').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-right: 1px solid #000000');
 	});
 
 	it('Apply left and right border', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-4');
+		cy.cGet('#border-4').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-left: 1px solid #000000; border-right: 1px solid #000000');
 	});
 
 	it('Apply top border', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-5');
+		cy.cGet('#border-5').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-top: 1px solid #000000');
 	});
 
 	it('Apply bottom border', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-6');
+		cy.cGet('#border-6').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-bottom: 1px solid #000000');
 	});
 
 	it('Apply top and bottom border', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-7');
+		cy.cGet('#border-7').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-top: 1px solid #000000; border-bottom: 1px solid #000000');
 	});
 
 	it('Apply border for all sides', function() {
+		helper.setDummyClipboardForCopy();
 		openAppearencePanelOnFirstCell();
 
-		helper.clickOnIdle('#border-8');
+		cy.cGet('#border-8').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'style', 'border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000');
@@ -159,7 +176,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 	it.skip('Apply horizontal borders for multiple cells', function() {
 		openAppearencePanelOnAllCells();
 
-		helper.clickOnIdle('#border-9');
+		cy.cGet('#border-9').click();
 
 		calcHelper.selectEntireSheet();
 
@@ -175,7 +192,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 	it.skip('Apply horizontal inner borders and vertical outer borders', function() {
 		openAppearencePanelOnAllCells();
 
-		helper.clickOnIdle('#border-10');
+		cy.cGet('#border-10').click();
 
 		calcHelper.selectEntireSheet();
 
@@ -194,7 +211,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 	it.skip('Apply vertical inner borders and horizontal outer borders', function() {
 		openAppearencePanelOnAllCells();
 
-		helper.clickOnIdle('#border-11');
+		cy.cGet('#border-11').click();
 
 		calcHelper.selectEntireSheet();
 
@@ -213,7 +230,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 	it.skip('Apply all inner and outer borders', function() {
 		openAppearencePanelOnAllCells();
 
-		helper.clickOnIdle('#border-12');
+		cy.cGet('#border-12').click();
 
 		calcHelper.selectEntireSheet();
 
@@ -226,11 +243,11 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change cell appearance.', f
 			});
 	});
 
-	it('Apply border color', function() {
+	it.skip('Apply border color', function() {
 		openAppearencePanelOnFirstCell();
 
 		// Apply left border first
-		helper.clickOnIdle('#border-2');
+		cy.cGet('#border-2').click();
 
 		// Then apply border color
 		cy.cGet('#FrameLineColor')

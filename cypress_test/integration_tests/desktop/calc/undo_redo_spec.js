@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require afterEach*/
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
@@ -6,36 +6,36 @@ var repairHelper = require('../../common/repair_document_helper');
 const desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Editing Operations', function() {
-	var testFileName = 'undo_redo.ods';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'calc');
+		helper.setupAndLoadDocument('calc/undo_redo.ods');
 		desktopHelper.switchUIToCompact();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function undo() {
 		helper.typeIntoDocument('Hello World');
 		helper.typeIntoDocument('{ctrl}z');
 		helper.selectAllText();
+		helper.copy();
 		cy.cGet('#copy-paste-container pre').should('not.have.text', 'Hello World');
 	}
 
 	it('Undo', function() {
+		helper.setDummyClipboardForCopy();
 		undo();
 	});
 
 	it('Redo', function() {
+		helper.setDummyClipboardForCopy();
 		undo();
 		helper.typeIntoDocument('{ctrl}y');
 		helper.selectAllText();
+		helper.copy();
 		helper.expectTextForClipboard('Hello World');
 	});
 
 	it('Repair Document', function() {
+		helper.setDummyClipboardForCopy();
 		helper.typeIntoDocument('Hello World');
 		helper.typeIntoDocument('{enter}');
 		calcHelper.dblClickOnFirstCell();
@@ -45,6 +45,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Editing Operations', funct
 		repairHelper.rollbackPastChange('Undo');
 		calcHelper.dblClickOnFirstCell();
 		helper.selectAllText();
+		helper.copy();
 		helper.expectTextForClipboard('Hello World');
 	});
 });

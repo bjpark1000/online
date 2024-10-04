@@ -1,4 +1,4 @@
-/* global describe it beforeEach require afterEach*/
+/* global describe it beforeEach require */
 
 var helper = require('../../common/helper');
 var impressHelper = require('../../common/impress_helper');
@@ -6,40 +6,40 @@ var desktopHelper = require('../../common/desktop_helper');
 var repairHelper = require('../../common/repair_document_helper');
 
 describe(['tagdesktop'], 'Editing Operations', function() {
-	var testFileName = 'undo_redo.odp';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'impress');
+		helper.setupAndLoadDocument('impress/undo_redo.odp');
 		desktopHelper.switchUIToCompact();
 		desktopHelper.selectZoomLevel('30');
 		impressHelper.selectTextShapeInTheCenter();
-		impressHelper.selectTextOfShape(false);
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		impressHelper.dblclickOnSelectedShape();
 	});
 
 	function undo() {
 		helper.typeIntoDocument('Hello World');
-		impressHelper.selectTextOfShape();
+		impressHelper.dblclickOnSelectedShape();
 		helper.typeIntoDocument('{ctrl}z');
-		impressHelper.selectTextOfShape();
+		impressHelper.dblclickOnSelectedShape();
+		helper.copy();
 		helper.clipboardTextShouldBeDifferentThan('Hello World');
 	}
 
 	it('Undo', function() {
+		helper.setDummyClipboardForCopy();
 		undo();
 	});
 
 	it('Redo', function() {
+		helper.setDummyClipboardForCopy();
 		undo();
 		helper.typeIntoDocument('{ctrl}y');
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('Hello World');
 	});
 
 	it('Repair Document', function() {
+		helper.setDummyClipboardForCopy();
 		helper.typeIntoDocument('Hello World');
 		impressHelper.triggerNewSVGForShapeInTheCenter();
 		impressHelper.selectTextOfShape();
@@ -48,6 +48,7 @@ describe(['tagdesktop'], 'Editing Operations', function() {
 		repairHelper.rollbackPastChange('Undo');
 		impressHelper.triggerNewSVGForShapeInTheCenter();
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('Hello World');
 	});
 });

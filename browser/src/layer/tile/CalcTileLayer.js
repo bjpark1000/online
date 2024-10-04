@@ -1,4 +1,5 @@
 /* -*- js-indent-level: 8 -*- */
+
 /*
  * Copyright the Collabora Online contributors.
  *
@@ -30,11 +31,9 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 		var commentList = app.sectionContainer.getSectionWithName(L.CSections.CommentList.name).sectionProperties.commentList;
 		var comment = null;
 
-		var cursorAddress = this._cellCursorXY;
-
 		for (var i = 0; i < commentList.length; i++) {
 			if (commentList[i].sectionProperties.data.tab == this._selectedPart) {
-				if (commentList[i].sectionProperties.data.cellRange.contains(cursorAddress)) {
+				if (commentList[i].sectionProperties.data.cellRange.contains(app.calc.cellAddress.toArray())) {
 					comment = commentList[i];
 					break;
 				}
@@ -42,16 +41,14 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 		}
 
 		if (!comment) {
-			var pixelStart = new L.Point(Math.ceil(this._cellCursorPixels.getX1()),
-						     Math.ceil(this._cellCursorPixels.getY1()));
+			var pixelStart = new L.Point(app.calc.cellCursorRectangle.pX1, app.calc.cellCursorRectangle.pY1);
 			var rangeStart = this.sheetGeometry.getCellFromPos(pixelStart, 'corepixels');
-			var pixelEnd = new L.Point(Math.floor(this._cellCursorPixels.getX2() - 1),
-						   Math.floor(this._cellCursorPixels.getY2() - 1));
+			var pixelEnd = new L.Point(app.calc.cellCursorRectangle.pX2 - 1, app.calc.cellCursorRectangle.pY2 - 1);
 			var rangeEnd = this.sheetGeometry.getCellFromPos(pixelEnd, 'corepixels');
 
 			var newComment = {
 				cellRange: new L.Bounds(rangeStart, rangeEnd),
-				anchorPos: app.file.calc.cellCursor.rectangle.twips.slice(), // Copy the array.
+				anchorPos: app.calc.cellCursorRectangle.toArray(),
 				id: 'new',
 				tab: this._selectedPart,
 				dateTime: new Date().toDateString(),
@@ -69,7 +66,7 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 	},
 
 	beforeAdd: function (map) {
-		map._isCursorVisible = false;
+		app.file.textCursor.visible = false;
 		map._addZoomLimit(this);
 		map.on('zoomend', this._onZoomRowColumns, this);
 		map.on('updateparts', this._onUpdateParts, this);
@@ -84,7 +81,7 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 		L.CanvasTileLayer.prototype.onAdd.call(this, map);
 
 		map.on('resize', function () {
-			if (this.isCursorVisible()) {
+			if (app.file.textCursor.visible) {
 				this._onUpdateCursor(true /* scroll */);
 			}
 		}.bind(this));
@@ -94,11 +91,12 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 		this.insertMode = false;
 		this._resetInternalState();
 		this._sheetSwitch = new L.SheetSwitchViewRestore(map);
+		this._sheetGrid = true;
 	},
 
 	_resetInternalState: function() {
 		this._cellSelections = Array(0);
-		this._cellCursorXY = new L.Point(-1, -1);
+		app.calc.cellCursorVisible = false;
 		this._gotFirstCellCursor = false;
 		this._lastColumn = 0; // with data
 		this._lastRow = 0; // with data
@@ -333,18 +331,18 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 		this._map.fire('scrolllimits', newSizePx.clone());
 
 		if (limitWidth || limitHeight || extendedLimit)
-			this._painter._sectionContainer.requestReDraw();
+			app.sectionContainer.requestReDraw();
 	},
 
 	_getCursorPosSize: function () {
 		var x = -1, y = -1;
-		if (this._cellCursorXY) {
-			x = this._cellCursorXY.x + 1;
-			y = this._cellCursorXY.y + 1;
-		}
 		var size = new L.Point(0, 0);
-		if (this._cellCursor && !this._isEmptyRectangle(this._cellCursor)) {
-			size = this._cellCursorTwips.getSize();
+
+		if (app.calc.cellCursorVisible) {
+			x = app.calc.cellAddress.x + 1;
+			y = app.calc.cellAddress.y + 1;
+
+			size = { x: app.calc.cellCursorRectangle.width, y: app.calc.cellCursorRectangle.height };
 		}
 
 		return { curX: x, curY: y, width: size.x, height: size.y };
@@ -364,7 +362,7 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 	},
 
 	/// take into account only data area to reduce scrollbar range
-	updateScollLimit: function () {
+	updateScrollLimit: function () {
 		if (this.sheetGeometry && this._lastColumn && this._lastRow) {
 			this._restrictDocumentSize();
 		}
@@ -431,18 +429,26 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 			}
 			this._hiddenParts = command.hiddenparts || [];
 
-			let pparts = [];
+			var pparts = [];
 			pparts.length = command.parts;
 			this._protectedParts = pparts.fill(false, 0, command.parts);
 			if (command.protectedParts) {
-				command.protectedParts.forEach(i => this._protectedParts[i] = true);
+				command.protectedParts.forEach(function(i) {
+					return this._protectedParts[i] = true;
+				}.bind(this));
 			}
 
 			this._handleRTLFlags(command);
 			this._documentInfo = textMsg;
 			var partNames = textMsg.match(/[^\r\n]+/g);
 			// only get the last matches
+			var oldPartNames = this._partNames;
 			this._partNames = partNames.slice(partNames.length - this._parts);
+			app.calc.partHashes = this._partNames; // TODO: generate unique hash on the core side
+			// if the number of parts, or order has changed then refresh comment positions
+			if (oldPartNames !== this._partNames) {
+				app.socket.sendMessage('commandvalues command=.uno:ViewAnnotationsPosition');
+			}
 			this._map.fire('updateparts', {
 				selectedPart: this._selectedPart,
 				parts: this._parts,
@@ -453,7 +459,6 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 				source: 'status'
 			});
 			this._resetPreFetching(true);
-			this._update();
 			if (firstSelectedPart) {
 				this._switchSplitPanesContext();
 			}
@@ -604,32 +609,32 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 	_addRemoveGroupSections: function () {
 		// If there are row and column groups at the same time, add CornerGroup section.
 		if (this.sheetGeometry._rows._outlines._outlines.length > 0 && this.sheetGeometry._columns._outlines._outlines.length > 0) {
-			if (!this._painter._sectionContainer.doesSectionExist(L.CSections.CornerGroup.name))
-				this._painter._sectionContainer.addSection(L.control.cornerGroup());
+			if (!app.sectionContainer.doesSectionExist(L.CSections.CornerGroup.name))
+				app.sectionContainer.addSection(L.control.cornerGroup());
 		}
 		else { // If not, remove CornerGroup section.
-			this._painter._sectionContainer.removeSection(L.CSections.CornerGroup.name);
+			app.sectionContainer.removeSection(L.CSections.CornerGroup.name);
 		}
 
 		// If there are row groups, add RowGroup section.
 		if (this.sheetGeometry._rows._outlines._outlines.length > 0) {
-			if (!this._painter._sectionContainer.doesSectionExist(L.CSections.RowGroup.name))
-				this._painter._sectionContainer.addSection(L.control.rowGroup());
+			if (!app.sectionContainer.doesSectionExist(L.CSections.RowGroup.name))
+				app.sectionContainer.addSection(L.control.rowGroup());
 		}
 		else { // If not, remove RowGroup section.
-			this._painter._sectionContainer.removeSection(L.CSections.RowGroup.name);
+			app.sectionContainer.removeSection(L.CSections.RowGroup.name);
 		}
 
 		// If there are column groups, add ColumnGroup section.
 		if (this.sheetGeometry._columns._outlines._outlines.length > 0) {
-			if (!this._painter._sectionContainer.doesSectionExist(L.CSections.ColumnGroup.name)) {
-				this._painter._sectionContainer.addSection(L.control.columnGroup());
-				this._painter._sectionContainer.canvas.style.border = '1px solid darkgrey';
+			if (!app.sectionContainer.doesSectionExist(L.CSections.ColumnGroup.name)) {
+				app.sectionContainer.addSection(L.control.columnGroup());
+				app.sectionContainer.canvas.style.border = '1px solid darkgrey';
 			}
 		}
 		else { // If not, remove ColumnGroup section.
-			this._painter._sectionContainer.removeSection(L.CSections.ColumnGroup.name);
-			this._painter._sectionContainer.canvas.style.border = '0px solid darkgrey';
+			app.sectionContainer.removeSection(L.CSections.ColumnGroup.name);
+			app.sectionContainer.canvas.style.border = '0px solid darkgrey';
 		}
 	},
 
@@ -637,7 +642,7 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 		var sheetIsRTL = this._rtlParts.indexOf(this._selectedPart) >= 0;
 		if (sheetIsRTL && this._layoutIsRTL !== true) {
 			console.log('debug: in LTR -> RTL canvas section adjustments');
-			var sectionContainer = this._painter._sectionContainer;
+			var sectionContainer = app.sectionContainer;
 
 			var tilesSection = sectionContainer.getSectionWithName(L.CSections.Tiles.name);
 			var rowHeaderSection = sectionContainer.getSectionWithName(L.CSections.RowHeader.name);
@@ -678,7 +683,7 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 
 			console.log('debug: in RTL -> LTR canvas section adjustments');
 			this._layoutIsRTL = false;
-			var sectionContainer = this._painter._sectionContainer;
+			var sectionContainer = app.sectionContainer;
 
 			var tilesSection = sectionContainer.getSectionWithName(L.CSections.Tiles.name);
 			var rowHeaderSection = sectionContainer.getSectionWithName(L.CSections.RowHeader.name);
@@ -721,9 +726,9 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 				this._tileWidthTwips, this._tileHeightTwips,
 				this._tileSize, this._selectedPart);
 
-			this._painter._sectionContainer.addSection(L.control.cornerHeader());
-			this._painter._sectionContainer.addSection(L.control.rowHeader());
-			this._painter._sectionContainer.addSection(L.control.columnHeader());
+			app.sectionContainer.addSection(L.control.cornerHeader());
+			app.sectionContainer.addSection(new app.definitions.rowHeader());
+			app.sectionContainer.addSection(new app.definitions.columnHeader());
 		}
 		else {
 			this.sheetGeometry.update(jsonMsgObj, /* checkCompleteness */ false, this._selectedPart);
@@ -835,6 +840,22 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 				When insertMode is passive: User is selecting cells.
 			*/
 			this.insertMode = e.state.trim() === '' ? false: true;
+			if (!this.insertMode) {
+				app.file.textCursor.visible = false;
+				if (this._map._docLayer._cursorMarker)
+					this._map._docLayer._cursorMarker.remove();
+			}
+		}
+		else if (e.commandName === '.uno:ToggleSheetGrid') {
+			let trimmedState = e.state.trim();
+			// Disabled mean we don't change the sheet grid state.
+			if (trimmedState != 'disabled') {
+				let newState = trimmedState === 'true';
+				if (this._sheetGrid != newState) {
+					this._sheetGrid = newState;
+					app.sectionContainer.requestReDraw();
+				}
+			}
 		}
 	},
 
@@ -970,8 +991,7 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 	_onTextSelectionMsg: function (textMsg) {
 		L.CanvasTileLayer.prototype._onTextSelectionMsg.call(this, textMsg);
 		// If this is a cellSelection message, user shouldn't be editing a cell. Below check is for ensuring that.
-		if ((this.insertMode === false || this._map._isCursorVisible == false) &&
-		    this._cellCursorXY && this._cellCursorXY.x !== -1) {
+		if ((this.insertMode === false || app.file.textCursor.visible === false) && app.calc.cellCursorVisible) {
 			// When insertMode is false, this is a cell selection message.
 			textMsg = textMsg.replace('textselection:', '');
 			if (textMsg.trim() !== 'EMPTY' && textMsg.trim() !== '') {
@@ -1097,76 +1117,64 @@ L.CalcTileLayer = L.CanvasTileLayer.extend({
 		return this._twipsToPixels(new L.Point(this._docWidthTwips, this._docHeightTwips));
 	},
 
-	getCursorPos: function () {
-		return this._twipsToPixels(this._cellCursorTwips.getTopLeft());
-	},
-
 	_calculateScrollForNewCellCursor: function () {
+		var scroll = new app.definitions.simplePoint(0, 0);
 
-		var scroll = new L.LatLng(0, 0);
-
-		if (!this._cellCursor || this._isEmptyRectangle(this._cellCursor)) {
-			return scroll;
+		if (!app.calc.cellCursorVisible) {
+			return new L.LatLng(0, 0);
 		}
 
-		var map = this._map;
-		var paneRectsInLatLng = this.getPaneLatLngRectangles();
-
-		if (this._cellCursor.isInAny(paneRectsInLatLng)) {
-			return scroll; // no scroll needed.
+		let paneRectangles = app.getViewRectangles(); // SimpleRectangle array.
+		let contained = false;
+		for (let i = 0; i < paneRectangles.length; i++) {
+			if (paneRectangles[i].containsRectangle(app.calc.cellCursorRectangle.toArray()))
+				contained = true;
 		}
 
-		var noSplit = !this._splitPanesContext
-			|| this._splitPanesContext.getSplitPos().equals(new L.Point(0, 0));
+		if (contained)
+			return new L.LatLng(0, 0); // No scroll needed.
 
-		var cellWidth = this._cellCursor.getWidth();
-		var cellHeight = this._cellCursor.getHeight();
+		var noSplit = this._splitPanesContext.getSplitPos().equals(new L.Point(0, 0));
 
 		// No split panes. Check if target cell is bigger than screen but partially visible.
-		if (noSplit && this._cellCursor.intersects(paneRectsInLatLng[0])) {
-			var paneWidth = paneRectsInLatLng[0].getWidth();
-			var paneHeight = paneRectsInLatLng[0].getHeight();
-
-			if (cellWidth > paneWidth || cellHeight > paneHeight)
-				return scroll; // no scroll needed.
+		if (noSplit && app.calc.cellCursorRectangle.intersectsRectangle(paneRectangles[0].toArray())) {
+			if (app.calc.cellCursorRectangle.width > paneRectangles[0].width || app.calc.cellCursorRectangle.height > paneRectangles[0].height)
+				return new L.LatLng(0, 0); // no scroll needed.
 		}
 
-		var freePaneBounds = paneRectsInLatLng[paneRectsInLatLng.length - 1];
-		var splitPoint = map.unproject(this._splitPanesContext ? this._splitPanesContext.getSplitPos() : new L.Point(0, 0));
+		let freePane = paneRectangles[paneRectangles.length - 1]; // Last pane, this should be the scrollable - not frozen one.
 
 		// Horizontal split
-		if (this._cellCursor.getEast() > splitPoint.lng) {
-			var freePaneWidth = freePaneBounds.getWidth();
-			var cellWidth = this._cellCursor.getWidth();
+		if (app.calc.cellCursorRectangle.x2 > app.calc.splitCoordinate.x) {
+			if (app.calc.cellCursorRectangle.width > freePane.width)
+				return new L.LatLng(0, 0); // no scroll needed.
 
-			if (cellWidth > freePaneWidth)
-				return scroll; // no scroll needed.
+			var spacingX = app.calc.cellCursorRectangle.width / 4.0;
 
-			var spacingX = cellWidth / 4.0;
-
-			if (this._cellCursor.getWest() < freePaneBounds.getWest()) {
-				scroll.lng = this._cellCursor.getWest() - freePaneBounds.getWest() - spacingX;
+			if (app.calc.cellCursorRectangle.x1 < freePane.x1) {
+				scroll.x = app.calc.cellCursorRectangle.x1 - freePane.x1 - spacingX;
 			}
-			else if (cellWidth < freePaneWidth && this._cellCursor.getEast() > freePaneBounds.getEast()) {
-				scroll.lng = this._cellCursor.getEast() - freePaneBounds.getEast() + spacingX;
+			else if (app.calc.cellCursorRectangle.x2 > freePane.x2) {
+				scroll.x = app.calc.cellCursorRectangle.x2 - freePane.x2 + spacingX;
 			}
 		}
 
 		// Vertical split
-		if (this._cellCursor.getSouth() < splitPoint.lat) {
-			var freePaneHeight = freePaneBounds.getHeight();
+		if (app.calc.cellCursorRectangle.y2 > app.calc.splitCoordinate.y) {
+			if (app.calc.cellCursorRectangle.height > freePane.height)
+				return new L.LatLng(0, 0); // no scroll needed.
 
-			if (cellHeight > freePaneHeight)
-				return scroll; // no scroll needed.
-
-			var spacingY = cellHeight / 4.0;
-			if (this._cellCursor.getNorth() > freePaneBounds.getNorth()) {
-				scroll.lat = this._cellCursor.getNorth() - freePaneBounds.getNorth() + spacingY;
+			var spacingY = app.calc.cellCursorRectangle.height / 4.0;
+			var halfSize = (freePane.y2 - freePane.y1) / 2;
+			if (app.calc.cellCursorRectangle.y1 < freePane.y1) {
+				scroll.y = app.calc.cellCursorRectangle.y1 - freePane.y1 - halfSize - spacingY;
 			}
-			else if (this._cellCursor.getSouth() < freePaneBounds.getSouth()) {
-				scroll.lat = this._cellCursor.getSouth() - freePaneBounds.getSouth() - spacingY;
+			else if (app.calc.cellCursorRectangle.y2 > freePane.y2) {
+				scroll.y = app.calc.cellCursorRectangle.y2 - freePane.y2 + halfSize + spacingY;
 			}
 		}
+
+		scroll = this._twipsToLatLng(scroll, this._map.getZoom()); // Simple point is also converted to L.Point by the converter.
 
 		return scroll;
 	},

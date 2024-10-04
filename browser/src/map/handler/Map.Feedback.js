@@ -27,6 +27,11 @@ L.Map.Feedback = L.Handler.extend({
 		L.DomEvent.off(window, 'message', this.onMessage, this);
 	},
 
+	removeIframe: function () {
+		if (this._iframeDialog)
+			this._iframeDialog.remove()
+	},
+
 	onUpdateList: function () {
 		var docLayer = this._map._docLayer || {};
 
@@ -40,22 +45,21 @@ L.Map.Feedback = L.Handler.extend({
 
 		this.initialized = true;
 
-		if (window.localStorage.getItem('WSDFeedbackEnabled') !== 'false') {
+		if (window.prefs.getBoolean('WSDFeedbackEnabled', true)) {
 			var laterDate = new Date();
 			var currentDate = new Date();
-			var timeValue = window.localStorage.getItem('WSDFeedbackLaterDate');
-			var docCount = window.localStorage.getItem('WSDFeedbackCount');
+			var timeValue = window.prefs.getNumber('WSDFeedbackLaterDate');
+			var docCount = window.prefs.getNumber('WSDFeedbackCount', 0);
 
-			docCount = parseInt(docCount);
-			docCount = isNaN(docCount) ? 1 : docCount + 1;
-			window.localStorage.setItem('WSDFeedbackCount', docCount);
+			docCount++;
 
-			if (!timeValue || isNaN(timeValue)) {
+			window.prefs.set('WSDFeedbackCount', docCount);
+
+			if (isNaN(timeValue)) {
 				/* - 5 seconds */
 				laterDate.setTime(currentDate.getTime() - 5000);
 			} else {
 				/* + 5 days (432,000,000 Milliseconds) */
-				timeValue = Number(timeValue);
 				laterDate.setTime(timeValue + 432000000);
 			}
 
@@ -86,16 +90,21 @@ L.Map.Feedback = L.Handler.extend({
 
 	showFeedbackDialog: function () {
 		if (this._iframeDialog && this._iframeDialog.hasLoaded())
-			this._iframeDialog.remove();
+			this.removeIframe();
 
 		var lokitHash = document.querySelector('#lokit-version a') || {};
 		lokitHash = lokitHash ? lokitHash.innerText : '';
+		var wopiHostId = document.querySelector('#wopi-host-id') || {};
+		wopiHostId = wopiHostId ? wopiHostId.innerText : '';
+		var proxyPrefixEnabled = window.socketProxy ? "True" : "False";
 
 		var cssVar = getComputedStyle(document.documentElement).getPropertyValue('--co-primary-element');
 		var params = [{ mobile : window.mode.isMobile() },
 			      { cssvar : cssVar},
 			      { wsdhash : window.app.socket.WSDServer.Hash },
-			      { 'lokit_hash' : lokitHash }];
+			      { 'lokit_hash' : lokitHash },
+			      { 'wopi_host_id' : wopiHostId },
+			      { 'proxy_prefix_enabled' : proxyPrefixEnabled }];
 
 		var options = {
 			prefix: 'iframe-dialog',
@@ -106,8 +115,8 @@ L.Map.Feedback = L.Handler.extend({
 	},
 
 	onError: function () {
-		window.localStorage.removeItem('WSDFeedbackEnabled');
-		this._iframeDialog.remove();
+		window.prefs.remove('WSDFeedbackEnabled');
+		this.removeIframe();
 	},
 
 	onMessage: function (e) {
@@ -124,30 +133,30 @@ L.Map.Feedback = L.Handler.extend({
 			this._iframeDialog.show();
 		}
 		else if (data == 'feedback-never') {
-			window.localStorage.setItem('WSDFeedbackEnabled', 'false');
-			window.localStorage.removeItem('WSDFeedbackCount');
-			this._iframeDialog.remove();
+			window.prefs.set('WSDFeedbackEnabled', false);
+			window.prefs.remove('WSDFeedbackCount');
+			this.removeIframe();
 		} else if (data == 'feedback-later') {
 			var currentDate = new Date();
-			this._iframeDialog.remove();
-			window.localStorage.setItem('WSDFeedbackLaterDate', currentDate.getTime());
-			window.localStorage.removeItem('WSDFeedbackCount');
+			this.removeIframe();
+			window.prefs.set('WSDFeedbackLaterDate', currentDate.getTime());
+			window.prefs.remove('WSDFeedbackCount');
 		} else if (data == 'feedback-submit') {
-			window.localStorage.setItem('WSDFeedbackEnabled', 'false');
-			window.localStorage.removeItem('WSDFeedbackCount');
+			window.prefs.set('WSDFeedbackEnabled', false);
+			window.prefs.remove('WSDFeedbackCount');
 			var that = this;
 			setTimeout(function() {
 				that._iframeDialog.remove();
 			}, 400);
 
 		} else if (data == 'iframe-feedback-load' && !this._iframeDialog.isVisible()) {
-			this._iframeDialog.remove();
+			this.removeIframe();
 			setTimeout(L.bind(this.onFeedback, this), this._map.options.feedbackTimeout);
 		} else if (data.endsWith('close')) {
-			this._iframeDialog.remove();
+			this.removeIframe();
 		}
 	}
 });
-if (window.feedbackUrl && window.isLocalStorageAllowed) {
+if (window.feedbackUrl && window.prefs.canPersist) {
 	L.Map.addInitHook('addHandler', 'feedback', L.Map.Feedback);
 }

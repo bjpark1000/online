@@ -163,8 +163,8 @@ Edit, view, readOnly:
     - API:
         map.setPermission('edit' | 'view' | 'readonly')
     - events:
-        map.on('updatepermission', function (e) {}) where:
-            + e.perm == 'edit' | 'view' | 'readonly'
+        app.events.on('updatepermission', function (e) {}) where:
+            + e.detail.perm == 'edit' | 'view' | 'readonly'
 
 Buttons like Bold, Italic, Strike through etc.
     - API:
@@ -217,10 +217,11 @@ Parts (like slides in presentation, or sheets in spreadsheets):
             + [e.part] - if the preview is for a part
             + e.docType
 
-Statusindicator (when the document is loading):
+progress (when the document is loading):
     - events
-        map.on('statusindicator', function (e) {}) where:
+        map.on('progress', function (e) {}) where:
             + e.statusType = 'start' | 'setvalue' | 'finish' | 'coolloaded' | 'alltilesloaded'
+	    + e.type == 'bg' for a background operation
             + e.value == a value from 0 to 100 indicating the status
               if the statusType is 'setvalue
             + 'coolloaded' is fired when the JS code is initialized and the document
@@ -387,10 +388,10 @@ x				menu-nb-hamburger > ul (calculated from jquery.smartmenus.js)
 -------------------------------------------
 		on the top
 -------------------------------------------
-1105			dialogs
+1105			dialogs, tooltips
 1001			mobile-edit-button
 1500			mobile-wizard (with class=menuwizard)
 1501			toolbar-hamburger (with class=menuwizard-opened)
-2000			vex-overlay // JSDialog overlay?
-2001			vex dialog (vex-content) // JSDialog content?
+2000			JSDialog overlay
+2001			JSDialog modal
 -------------------------------------------

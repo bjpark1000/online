@@ -15,6 +15,11 @@
 /* global app _ cool */
 
 L.Map.include({
+	/*
+		@param {number} part - Target part
+		@param {boolean} external - Do we need to inform a core
+		@param {boolean} calledFromSetPartHandler - Requests a scroll to the cursor
+	*/
 	setPart: function (part, external, calledFromSetPartHandler) {
 		if (cool.Comment.isAnyEdit()) {
 			cool.CommentSection.showCommentEditingWarning();
@@ -22,10 +27,28 @@ L.Map.include({
 		}
 
 		var docLayer = this._docLayer;
+		var docType = docLayer._docType;
+		var isTheSamePart = true;
+
+		// check hashes, when we add/delete/move parts they can have the same part number as before
+		if (docType === 'spreadsheet') {
+			isTheSamePart =
+				app.calc.partHashes[docLayer._prevSelectedPart] === app.calc.partHashes[part];
+		} else if (docType === 'presentation' || docType === 'drawing') {
+			isTheSamePart =
+				app.impress.partHashes[docLayer._prevSelectedPart] === app.impress.partHashes[part];
+		} else if (docType !== 'text') {
+			console.error('Unknown docType: ' + docType);
+		}
+
+		if (docLayer._selectedPart === part && isTheSamePart) {
+			return;
+		}
 
 		if (docLayer.isCalc())
 			docLayer._sheetSwitch.save(part /* toPart */);
 
+		docLayer._clearMsgReplayStore(true /* notOtherMsg*/);
 		docLayer._prevSelectedPart = docLayer._selectedPart;
 		docLayer._selectedParts = [];
 		if (part === 'prev') {
@@ -73,7 +96,7 @@ L.Map.include({
 		this.fire('scrolltopart');
 
 		docLayer._selectedParts.push(docLayer._selectedPart);
-		if (docLayer.isCursorVisible()) {
+		if (app.file.textCursor.visible) {
 			// a click outside the slide to clear any selection
 			app.socket.sendMessage('resetselection');
 		}
@@ -87,9 +110,9 @@ L.Map.include({
 			docType: docLayer._docType
 		});
 
-		docLayer.eachView(docLayer._viewCursors, docLayer._onUpdateViewCursor, docLayer);
-		docLayer.eachView(docLayer._cellViewCursors, docLayer._onUpdateCellViewCursor, docLayer);
-		docLayer.eachView(docLayer._graphicViewMarkers, docLayer._onUpdateGraphicViewSelection, docLayer);
+		app.definitions.otherViewCellCursorSection.updateVisibilities();
+		app.definitions.otherViewCursorSection.updateVisibilities();
+		app.definitions.otherViewGraphicSelectionSection.updateVisibilities();
 		docLayer.eachView(docLayer._viewSelections, docLayer._onUpdateTextViewSelection, docLayer);
 		docLayer._clearSelections(calledFromSetPartHandler);
 		docLayer._updateOnChangePart();
@@ -109,6 +132,8 @@ L.Map.include({
 	selectPart: function (part, how, external) {
 		//TODO: Update/track selected parts(?).
 		var docLayer = this._docLayer;
+		var oldParts = docLayer._selectedParts.slice();
+		var newParts = docLayer._selectedParts;
 		var index = docLayer._selectedParts.indexOf(part);
 		if (index >= 0 && how != 1) {
 			// Remove (i.e. deselect)
@@ -117,6 +142,12 @@ L.Map.include({
 		else if (how != 0) {
 			// Add (i.e. select)
 			docLayer._selectedParts.push(part);
+		}
+
+		// did we change anything?
+		if (oldParts.length === newParts.length &&
+			oldParts.every((value, index) => { return value === newParts[index]; })) {
+			return;
 		}
 
 		this.fire('updateparts', {
@@ -141,7 +172,13 @@ L.Map.include({
 	},
 
 	_processPreviewQueue: function() {
+		if (!this._docLayer)
+			return;
+
 		if (!this._docLayer._canonicalIdInitialized)
+			return;
+
+		if (!this._docLayer._preview)
 			return;
 
 		if (this._previewRequestsOnFly > 1) {
@@ -160,23 +197,30 @@ L.Map.include({
 				this._timeToEmptyQueue = now;
 			}
 		}
+
+		var previewParts = [];
 		// take 3 requests from the queue:
 		while (this._previewRequestsOnFly < 3) {
 			var tile = this._previewQueue.shift();
 			if (!tile)
 				break;
-			var isVisible = this.isPreviewVisible(tile[0], true);
-			if (isVisible != true)
+			var isVisible = this._docLayer._preview._isPreviewVisible(tile[0]);
+			if (isVisible != true && tile[1].indexOf('slideshow') < 0)
 				// skip this! we can't see it
 				continue;
 			this._previewRequestsOnFly++;
+			this.fire('beforerequestpreview', { part: tile[0] });
 			app.socket.sendMessage(tile[1]);
+			previewParts.push(tile[0]);
 		}
+
+		if (previewParts.length > 0)
+			window.app.console.debug('PREVIEW: request preview parts : ' + previewParts.join());
 	},
 
 	_addPreviewToQueue: function(part, tileMsg) {
 		for (var tile in this._previewQueue)
-			if (tile[0] === part)
+			if (this._previewQueue[tile][0] === part)
 				// we already have this tile in the queue
 				// no need to ask for it twice
 				return;
@@ -189,6 +233,7 @@ L.Map.include({
 		}
 		var autoUpdate = options ? !!options.autoUpdate : false;
 		var fetchThumbnail = options && options.fetchThumbnail ? options.fetchThumbnail : true;
+		var isSlideshow = options && options.slideshow ? options.slideshow : false;
 		this._docPreviews[id] = {id: id, index: index, maxWidth: maxWidth, maxHeight: maxHeight, autoUpdate: autoUpdate, invalid: false};
 
 		var docLayer = this._docLayer;
@@ -224,7 +269,8 @@ L.Map.include({
 							'tileposy=' + tilePosY + ' ' +
 							'tilewidth=' + tileWidth + ' ' +
 							'tileheight=' + tileHeight + ' ' +
-							'id=' + id);
+							'id=' + id +
+							(isSlideshow ? ' slideshow=1' : ''));
 			this._processPreviewQueue();
 		}
 
@@ -298,9 +344,16 @@ L.Map.include({
 		}
 
 		if (this.isPresentationOrDrawing()) {
-			app.socket.sendMessage('uno .uno:InsertPage');
+			if (nPos === undefined) {
+				app.socket.sendMessage('uno .uno:InsertPage');
+			}
+			else {
+				var argument = {InsertPos: {type: 'int16', value: nPos}};
+				app.socket.sendMessage('uno .uno:InsertPage ' + JSON.stringify(argument));
+			}
 		}
 		else if (this.getDocType() === 'spreadsheet') {
+			this._docLayer._sheetSwitch.updateOnSheetInsertion(nPos);
 			var command = {
 				'Name': {
 					'type': 'string',
@@ -361,6 +414,7 @@ L.Map.include({
 			app.socket.sendMessage('uno .uno:DeletePage');
 		}
 		else if (this.getDocType() === 'spreadsheet') {
+			this._docLayer._sheetSwitch.updateOnSheetDeleted(nPos);
 			var command = {
 				'Index': {
 					'type': 'long',

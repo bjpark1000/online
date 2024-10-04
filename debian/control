@@ -2,14 +2,14 @@ Source: coolwsd
 Section: web
 Priority: optional
 Maintainer: Andras Timar <andras.timar@collabora.com>
-Build-Depends: debhelper (>= 9.20160709) | dh-systemd (>= 1.3), libcap-dev, libcap2-bin, nodejs, python3-polib, python3-lxml, fontconfig, libpam-dev, libcppunit-dev, pkg-config, devscripts, m4
+Build-Depends: debhelper (>= 9.20160709) | dh-systemd (>= 1.3), dh-apparmor, libcap-dev, libcap2-bin, nodejs, python3-polib, python3-lxml, fontconfig, libpam-dev, libcppunit-dev, pkg-config, devscripts, m4
 Standards-Version: 3.9.7
 
 Package: coolwsd
 Section: web
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
- adduser, fontconfig, cpio, libcap2-bin,
+ adduser, fontconfig, cpio,
  collaboraofficebasis-calc,
  collaboraofficebasis-core,
  collaboraofficebasis-graphicfilter,
@@ -99,3 +99,15 @@ Replaces: loolwsd,
 Description: Collabora Online WebSocket Daemon
  COOLWSD is a daemon that talks to web browser clients and provides LibreOffice
  services.
+
+Package: coolwsd-deprecated
+Section: web
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+ coolwsd, libcap2-bin
+Description: Collabora Online WebSocket Daemon Deprecated Utilities
+ COOLWSD is a daemon that talks to web browser clients and provides LibreOffice
+ services.
+ .
+ This package provides helpers to function in the absence of working mount
+ namespaces.

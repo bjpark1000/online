@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 declare var L: any;
 
 namespace cool {
@@ -168,6 +170,10 @@ export class Point {
 	public static toPoint(x: PointConvertable | number, y?: number, round?: boolean): Point {
 		if (x instanceof Point) {
 			return x;
+		}
+
+		if (x instanceof SimplePoint) {
+			return new Point(x.x, x.y);
 		}
 
 		if (Array.isArray(x)) {

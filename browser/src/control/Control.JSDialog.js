@@ -1,4 +1,5 @@
 /* -*- js-indent-level: 8 -*- */
+
 /*
  * Copyright the Collabora Online contributors.
  *
@@ -15,9 +16,7 @@
 
 /* global JSDialog Hammer app _ */
 L.Control.JSDialog = L.Control.extend({
-	options: {
-		snackbarTimeout: 10000
-	},
+	options: {},
 	dialogs: {},
 	draggingObject: null,
 
@@ -29,7 +28,7 @@ L.Control.JSDialog = L.Control.extend({
 		this.map.on('jsdialogaction', this.onJSAction, this);
 		this.map.on('zoomend', this.onZoomEnd, this);
 		this.map.on('closealldialogs', this.onCloseAll, this);
-		this.map.on('closeAutoFilterDialog', this.closeAutoFilterDialogsOnTabChange, this);
+		this.map.on('closeAutoFilterDialog', this.closePopupsOnTabChange, this);
 	},
 
 	onRemove: function() {
@@ -38,7 +37,7 @@ L.Control.JSDialog = L.Control.extend({
 		this.map.off('jsdialogaction', this.onJSAction, this);
 		this.map.off('zoomend', this.onZoomEnd, this);
 		this.map.off('closealldialogs', this.onCloseAll, this);
-		this.map.off('closeAutoFilterDialog', this.closeAutoFilterDialogsOnTabChange, this);
+		this.map.off('closeAutoFilterDialog', this.closePopupsOnTabChange, this);
 	},
 
 	hasDialogOpened: function() {
@@ -96,7 +95,7 @@ L.Control.JSDialog = L.Control.extend({
 			if (leaveSnackbar && dialogs[i] && dialogs[i] === 'snackbar')
 				continue;
 
-			this.close(dialogs[i], true);
+			this.close(dialogs[i], app.idleHandler._active);
 		}
 	},
 
@@ -154,6 +153,8 @@ L.Control.JSDialog = L.Control.extend({
 
 	onCloseAll: function() {
 		this.closeAll(/*leaveSnackbar*/ true);
+		// should also close all dropdowns on close all dialogs
+		this.closeAllDropdowns();
 	},
 
 	focusToLastElement: function(id) {
@@ -261,11 +262,11 @@ L.Control.JSDialog = L.Control.extend({
 
 		if (instance.haveTitlebar) {
 			instance.titlebar = L.DomUtil.create('div', 'ui-dialog-titlebar ui-corner-all ui-widget-header ui-helper-clearfix', instance.form);
-			var title = L.DomUtil.create('span', 'ui-dialog-title', instance.titlebar);
+			var title = L.DomUtil.create('h2', 'ui-dialog-title', instance.titlebar);
 			title.innerText = instance.title;
 			instance.titleCloseButton = L.DomUtil.create('button', 'ui-button ui-corner-all ui-widget ui-button-icon-only ui-dialog-titlebar-close', instance.titlebar);
 			instance.titleCloseButton.setAttribute('aria-label', _('Close dialog'));
-			instance.titleCloseButton.tabIndex = '-1';
+			instance.titleCloseButton.tabIndex = '0';
 			L.DomUtil.create('span', 'ui-button-icon ui-icon ui-icon-closethick', instance.titleCloseButton);
 		}
 
@@ -579,12 +580,12 @@ L.Control.JSDialog = L.Control.extend({
 			var rtlPosx = parentAutofilter.left - instance.form.getBoundingClientRect().width;
 			instance.posx = rtlPosx < 0 ? 0 : rtlPosx;
 		}
-		// set posx of instance (submenufilter) based on window width 
+		// set posx of instance (submenufilter) based on window width
 		var width = instance.content.clientWidth;
 		if (instance.posx + width > window.innerWidth)
 			instance.posx -= instance.posx + width - window.innerWidth;
 
-		// submenu filter popup should not go below toolbar element. Adjust height according to window height and bottom toolbar element so it will not overlap with each other 
+		// submenu filter popup should not go below toolbar element. Adjust height according to window height and bottom toolbar element so it will not overlap with each other
 		var height = instance.form.getBoundingClientRect().height;
 		if (instance.posy + height > window.innerHeight)
 			instance.posy = window.innerHeight - height;
@@ -592,7 +593,7 @@ L.Control.JSDialog = L.Control.extend({
 		this.updatePosition(instance.container, instance.posx, instance.posy);
 	},
 
-	closeAutoFilterDialogsOnTabChange: function() {
+	closePopupsOnTabChange: function() {
 		//this.dialogs is an object
 		var dialogKeys = Object.keys(this.dialogs);
 
@@ -628,13 +629,13 @@ L.Control.JSDialog = L.Control.extend({
 		instance.isSnackbar = e.data.type === 'snackbar';
 		instance.isDropdown = e.data.type === 'dropdown';
 		instance.isModalPopUp = e.data.type === 'modalpopup' || instance.isDropdown;
-		instance.snackbarTimeout = e.data.timeout || this.options.snackbarTimeout;
+		instance.snackbarTimeout = e.data.timeout;
 		instance.isOnlyChild = false;
 		instance.that = this;
 		instance.startX = e.data.posx;
 		instance.startY = e.data.posy;
 		instance.updatePos = null;
-		instance.canHaveFocus = !instance.isSnackbar && instance.id !== 'busypopup' && !instance.isMention;
+		instance.canHaveFocus = !instance.isSnackbar && instance.id !== 'busypopup' && !instance.isAutoCompletePopup;
 		instance.isDocumentAreaPopup = instance.popupParent === '_POPOVER_' && instance.posx !== undefined && instance.posy !== undefined;
 		instance.isPopup = instance.isModalPopUp || instance.isDocumentAreaPopup || instance.isSnackbar;
 		instance.containerParent = instance.isDocumentAreaPopup ? document.getElementById('document-container'): document.body;
@@ -699,7 +700,7 @@ L.Control.JSDialog = L.Control.extend({
 			instance.updatePos = this.setPosition.bind(this, instance);
 
 			// Special case for nonModal dialogues. Core side doesn't send their initial coordinates. We need to center them.
-			if (instance.nonModal) {
+			if (instance.nonModal && !(instance.startX && instance.startY)) {
 				this.centerDialogPosition(instance);
 			} else {
 				instance.updatePos();
@@ -711,7 +712,7 @@ L.Control.JSDialog = L.Control.extend({
 			this.dialogs[instance.id] = instance;
 
 			if (instance.isSnackbar && instance.snackbarTimeout > 0) {
-				instance.timeoutId = setTimeout(function () { instance.that.closePopover(instance.id, false); }, instance.snackbarTimeout);
+				instance.timeoutId = setTimeout(function () { app.map.uiManager.closeSnackbar(); }, instance.snackbarTimeout);
 			}
 		}
 	},
@@ -779,26 +780,41 @@ L.Control.JSDialog = L.Control.extend({
 		builder.executeAction(dialogContainer, innerData);
 	},
 
+	_clamp: function(value, min, max) {
+		return Math.min(Math.max(value, min), max);
+	},
+
 	onPan: function (ev) {
-		var target = this.draggingObject;
+		const target = this.draggingObject;
 		if (target) {
-			var isRTL = document.documentElement.dir === 'rtl';
+			const isRTL = document.documentElement.dir === 'rtl';
 
-			var startX = target.startX ? target.startX : 0;
-			var startY = target.startY ? target.startY : 0;
+			const dialogBounds = target.form.getBoundingClientRect();
+			const width = dialogBounds.width;
+			const height = dialogBounds.height;
 
-			var newX = startX + ev.deltaX * (isRTL ? -1 : 1);
-			var newY = startY + ev.deltaY;
+			const startX = target.startX ? target.startX : 0;
+			const startY = target.startY ? target.startY : 0;
 
-			// Don't allow to put dialog outside the view
-			if (!(newX < 0 || newY < 0
-				|| newX > window.innerWidth - target.offsetWidth/2
-				|| newY > window.innerHeight - target.offsetHeight/2)) {
-				target.translateX = newX;
-				target.translateY = newY;
+			let newX = startX + ev.deltaX * (isRTL ? -1 : 1);
+			let newY = startY + ev.deltaY;
 
-				this.updatePosition(target.container, newX, newY);
+			// We want to allow dragging the dialog offscreen iff it also drags another part of the dialog onscreen
+			if (newX < 0 && newX + width < window.innerWidth) {
+				newX = Math.min(0, window.innerWidth - width);
 			}
+
+			if (newX + width > window.innerWidth && newX > 0) {
+				newX = Math.max(window.innerWidth - width, 0);
+			}
+
+			// Happily for us, jsdialogs scroll in the y direction if the screen is too small anyway which lets us not worry about the title bar going fully offscreen
+			newY = this._clamp(newY, 0, window.innerHeight - height);
+
+			target.translateX = newX;
+			target.translateY = newY;
+
+			this.updatePosition(target.container, newX, newY);
 		}
 	},
 
@@ -813,10 +829,11 @@ L.Control.JSDialog = L.Control.extend({
 		switch (keyCode) {
 		case 27:
 			// ESC
-			var dialogs = Object.keys(this.dialogs);
-			if (dialogs.length) {
-				var lastKey = dialogs[dialogs.length - 1];
-				this.close(lastKey, true);
+			var dialogKeys = Object.keys(this.dialogs);
+			if (dialogKeys.length) {
+				var lastKey = dialogKeys[dialogKeys.length - 1];
+				var sendCloseToServer = this.dialogs[lastKey].isDropdown !== true;
+				this.close(lastKey, sendCloseToServer);
 				return true;
 			}
 		}

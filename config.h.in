@@ -40,6 +40,9 @@
 /* Whether to enable SSL */
 #undef ENABLE_SSL
 
+/* Whether to default to using SSL_VERIFY_PEER */
+#undef SSL_VERIFY
+
 /* Whether to enable support key */
 #undef ENABLE_SUPPORT_KEY
 
@@ -54,12 +57,6 @@
 
 /* Define to 1 if you have the `ppoll' function. */
 #define HAVE_PPOLL 0
-
-/* Whether the used C++ has support for std::filesystem. */
-#undef HAVE_STD_FILESYSTEM
-
-/* Whether the std::filesystem is in the experimental header. */
-#undef HAVE_STD_FILESYSTEM_EXPERIMENTAL
 
 /* Default value of help root URL */
 #undef HELP_URL
@@ -111,3 +108,7 @@
 
 /* Define to 1 if this is the WASM app build. */
 #undef WASMAPP
+
+/* Makes config variables conditionally static, only in non-debug builds, to allow for overriding them in unit-tests. */
+#undef CONFIG_STATIC
+

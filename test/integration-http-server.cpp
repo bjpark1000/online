@@ -17,7 +17,7 @@
 #include <Session.hpp>
 #include <Common.hpp>
 #include <common/FileUtil.hpp>
-#include <countcoolkits.hpp>
+#include <KitPidHelpers.hpp>
 
 #include <Poco/Net/AcceptCertificateHandler.h>
 #include <Poco/Net/FilePartSource.h>
@@ -52,6 +52,8 @@ class HTTPServerTest : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testConvertToWithForwardedIP_Deny);
     CPPUNIT_TEST(testConvertToWithForwardedIP_Allow);
     CPPUNIT_TEST(testConvertToWithForwardedIP_DenyMulti);
+    CPPUNIT_TEST(testExtractDocStructure);
+    CPPUNIT_TEST(testTransformDocStructure);
     CPPUNIT_TEST(testRenderSearchResult);
 
     CPPUNIT_TEST_SUITE_END();
@@ -66,6 +68,8 @@ class HTTPServerTest : public CPPUNIT_NS::TestFixture
     void testConvertToWithForwardedIP_Deny();
     void testConvertToWithForwardedIP_Allow();
     void testConvertToWithForwardedIP_DenyMulti();
+    void testExtractDocStructure();
+    void testTransformDocStructure();
     void testRenderSearchResult();
 
 protected:
@@ -85,7 +89,7 @@ public:
         Poco::SharedPtr<Poco::Net::InvalidCertificateHandler> invalidCertHandler = new Poco::Net::AcceptCertificateHandler(false);
         Poco::Net::Context::Params sslParams;
         Poco::Net::Context::Ptr sslContext = new Poco::Net::Context(Poco::Net::Context::CLIENT_USE, sslParams);
-        Poco::Net::SSLManager::instance().initializeClient(nullptr, invalidCertHandler, sslContext);
+        Poco::Net::SSLManager::instance().initializeClient(nullptr, std::move(invalidCertHandler), std::move(sslContext));
 #endif
     }
 
@@ -99,14 +103,14 @@ public:
     void setUp()
     {
         helpers::resetTestStartTime();
-        testCountHowManyCoolkits();
+        helpers::waitForKitPidsReady("setUp");
         helpers::resetTestStartTime();
     }
 
     void tearDown()
     {
         helpers::resetTestStartTime();
-        testNoExtraCoolKitsLeft();
+        helpers::waitForKitPidsReady("tearDown");
         helpers::resetTestStartTime();
     }
 
@@ -140,10 +144,10 @@ void HTTPServerTest::testCoolGet()
     Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, pathAndQuery);
     Poco::Net::HTMLForm param(request);
 
-    const std::string html = httpResponse->getBody();
+    const std::string& html = httpResponse->getBody();
     LOK_ASSERT(html.find(param["access_token"]) != std::string::npos);
     LOK_ASSERT(html.find(_uri.getHost()) != std::string::npos);
-    LOK_ASSERT(html.find(std::string(COOLWSD_VERSION_HASH)) != std::string::npos);
+    LOK_ASSERT(html.find(Util::getCoolVersionHash()) != std::string::npos);
 }
 
 void HTTPServerTest::testCoolPostPoco()
@@ -155,6 +159,7 @@ void HTTPServerTest::testCoolPostPoco()
     Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, "/browser/dist/cool.html");
     Poco::Net::HTMLForm form;
     form.set("access_token", "2222222222");
+    form.set("buy_product", "https://jim:bob@nowhere.com/other/stuff?a=b;c=d#somethingelse");
     form.prepareSubmit(request);
     std::ostream& ostr = session->sendRequest(request);
     form.write(ostr);
@@ -167,7 +172,38 @@ void HTTPServerTest::testCoolPostPoco()
     Poco::StreamCopier::copyToString(rs, html);
 
     LOK_ASSERT(html.find(form["access_token"]) != std::string::npos);
+    LOK_ASSERT(html.find(form["buy_product"]) != std::string::npos);
     LOK_ASSERT(html.find(_uri.getHost()) != std::string::npos);
+
+    std::string csp = response["Content-Security-Policy"];
+    StringVector lines = StringVector::tokenize(csp, ';');
+    LOG_TST("CSP - " << csp << " tokens " << lines.size());
+    for (size_t i = 0; i < lines.size(); ++i)
+    {
+        if(lines.startsWith(i, " connect-src") ||
+           lines.startsWith(i, " frame-src") ||
+           lines.startsWith(i, " img-src"))
+        {
+            StringVector split = StringVector::tokenize(lines[i], ' ');
+
+            for (size_t j = 1; j < split.size(); ++j)
+            {
+                if (split[j] == "'self'" || split[j] == "data:" || split[j] == "blob:")
+                    continue;
+
+                Poco::URI uri(split[j]);
+                LOG_TST("URL - " << split[j]);
+                LOK_ASSERT_EQUAL(std::string(""), uri.getUserInfo());
+                LOK_ASSERT(uri.getPath() == std::string("") ||
+                           uri.getPath() == std::string("*"));
+                LOK_ASSERT_EQUAL(std::string(""), uri.getQuery());
+                LOK_ASSERT_EQUAL(std::string(""), uri.getFragment());
+            }
+        }
+    }
+
+    std::string wildcard = "https://*.collabora.com";
+    LOK_ASSERT_EQUAL(wildcard, Util::trimURI(wildcard));
 }
 
 void HTTPServerTest::testCoolPost()
@@ -221,29 +257,20 @@ void HTTPServerTest::testCoolPost()
     LOK_ASSERT_EQUAL(http::StatusCode::OK, httpResponse->statusLine().statusCode());
     LOK_ASSERT_EQUAL(std::string("text/html"), httpResponse->header().getContentType());
 
-    const std::string html = httpResponse->getBody();
+    const std::string& html = httpResponse->getBody();
     fprintf(stderr, "%s\n", html.c_str());
     LOK_ASSERT(html.find(_uri.getHost()) != std::string::npos);
-    LOK_ASSERT(html.find("window.versionPath = '" COOLWSD_VERSION_HASH "';") != std::string::npos);
-    LOK_ASSERT(html.find("window.coolwsdVersion = '" COOLWSD_VERSION "';") != std::string::npos);
-    LOK_ASSERT(html.find("window.accessToken = 'choMXq0rSMcsm0RoZZWDWsrgAcE5AHwc';") !=
+    LOK_ASSERT(html.find("data-version-path = \"" + Util::getCoolVersionHash() + '"') !=
                std::string::npos);
-    LOK_ASSERT(html.find("window.accessTokenTTL = '0';") != std::string::npos);
-    LOK_ASSERT(html.find("window.accessHeader = '';") != std::string::npos);
-    LOK_ASSERT(html.find("window.postMessageOriginExt = 'https://www.example.com:8080';") !=
+    LOK_ASSERT(html.find("data-coolwsd-version = \"" + Util::getCoolVersion() + '"') !=
                std::string::npos);
-    LOK_ASSERT(
-        html.find(
-            "window.frameAncestors = decodeURIComponent('%20127.0.0.1:%2A%20localhost:%2A');") !=
-        std::string::npos);
-    LOK_ASSERT(
-        html.find(
-            R"xx(window.uiDefaults = {"presentation":{"ShowSidebar":false,"ShowStatusbar":false},"spreadsheet":{"ShowSidebar":false,"ShowStatusbar":false},"text":{"ShowRuler":false,"ShowSidebar":false,"ShowStatusbar":false},"uiMode":"classic"};)xx") !=
-        std::string::npos);
-    LOK_ASSERT(
-        html.find(
-            R"xx(<style>:root {--co-primary-text:#ffffff;--co-primary-element:#0082c9;--co-text-accent:#0082c9;--co-primary-light:#e6f3fa;--co-primary-element-light:#17adff;--co-color-error:#e9322d;--co-color-warning:#eca700;--co-color-success:#46ba61;--co-border-radius:3px;--co-border-radius-large:10px;--co-loading-light:#ccc;--co-loading-dark:#444;--co-box-shadow:rgba(77, 77, 77, 0.5);--co-border:#ededed;--co-border-dark:#dbdbdb;--co-border-radius-pill:100px;}</style>)xx") !=
-        std::string::npos);
+    LOK_ASSERT(html.find("choMXq0rSMcsm0RoZZWDWsrgAcE5AHwc") != std::string::npos);
+    LOK_ASSERT(html.find("data-access-token-ttl = \"0\"") != std::string::npos);
+    LOK_ASSERT(html.find("data-access-header = \"\"") != std::string::npos);
+    LOK_ASSERT(html.find("data-post-message-origin-ext = \"https://www.example.com:8080\"") != std::string::npos);
+    LOK_ASSERT(html.find("data-frame-ancestors = \"%20127.0.0.1:%2A%20localhost:%2A\"") != std::string::npos);
+    LOK_ASSERT(html.find("data-ui-defaults = \"eyJwcmVzZW50YXRpb24iOnsiU2hvd1NpZGViYXIiOiJmYWxzZSIsIlNob3dTdGF0dXNiYXIiOiJmYWxzZSJ9LCJzcHJlYWRzaGVldCI6eyJTaG93U2lkZWJhciI6ImZhbHNlIiwiU2hvd1N0YXR1c2JhciI6ImZhbHNlIn0sInRleHQiOnsiU2hvd1J1bGVyIjoiZmFsc2UiLCJTaG93U2lkZWJhciI6ImZhbHNlIiwiU2hvd1N0YXR1c2JhciI6ImZhbHNlIn0sInVpTW9kZSI6ImNsYXNzaWMifQ==\"") != std::string::npos);
+    LOK_ASSERT(html.find("OnJvb3Qgey0tY28tcHJpbWFyeS10ZXh0OiNmZmZmZmY7LS1jby1wcmltYXJ5LWVsZW1lbnQ6IzAwODJjOTstLWNvLXRleHQtYWNjZW50OiMwMDgyYzk7LS1jby1wcmltYXJ5LWxpZ2h0OiNlNmYzZmE7LS1jby1wcmltYXJ5LWVsZW1lbnQtbGlnaHQ6IzE3YWRmZjstLWNvLWNvbG9yLWVycm9yOiNlOTMyMmQ7LS1jby1jb2xvci13YXJuaW5nOiNlY2E3MDA7LS1jby1jb2xvci1zdWNjZXNzOiM0NmJhNjE7LS1jby1ib3JkZXItcmFkaXVzOjNweDstLWNvLWJvcmRlci1yYWRpdXMtbGFyZ2U6MTBweDstLWNvLWxvYWRpbmctbGlnaHQ6I2NjYzstLWNvLWxvYWRpbmctZGFyazojNDQ0Oy0tY28tYm94LXNoYWRvdzpyZ2JhKDc3LCA3NywgNzcsIDAuNSk7LS1jby1ib3JkZXI6I2VkZWRlZDstLWNvLWJvcmRlci1kYXJrOiNkYmRiZGI7LS1jby1ib3JkZXItcmFkaXVzLXBpbGw6MTAwcHg7fQ") != std::string::npos);
 }
 
 void HTTPServerTest::assertHTTPFilesExist(const Poco::URI& uri, Poco::RegularExpression& expr,
@@ -576,6 +603,126 @@ void HTTPServerTest::testConvertToWithForwardedIP_DenyMulti()
     catch(const Poco::Exception& exc)
     {
         LOK_ASSERT_FAIL(exc.displayText() + ": " + (exc.nested() ? exc.nested()->displayText() : ""));
+    }
+}
+
+void HTTPServerTest::testExtractDocStructure()
+{
+    const char *testname = "testExtractDocStructure";
+    const std::string srcPath = helpers::getTempFileCopyPath(TDOC, "docStructure.docx", "docStructure_");
+    std::unique_ptr<Poco::Net::HTTPClientSession> session(helpers::createSession(_uri));
+    session->setTimeout(Poco::Timespan(COMMAND_TIMEOUT_SECS * 2, 0)); // 10 seconds.
+
+    TST_LOG("extract-document-structure");
+
+    Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, "/cool/extract-document-structure");
+    Poco::Net::HTMLForm form;
+    form.setEncoding(Poco::Net::HTMLForm::ENCODING_MULTIPART);
+    form.addPart("data", new Poco::Net::FilePartSource(srcPath));
+    form.prepareSubmit(request);
+    try
+    {
+        form.write(session->sendRequest(request));
+    }
+    catch (const std::exception& ex)
+    {
+        // In case the server is still starting up.
+        sleep(COMMAND_TIMEOUT_SECS);
+        form.write(session->sendRequest(request));
+    }
+
+    Poco::Net::HTTPResponse response;
+    std::stringstream actualStream;
+    std::istream& responseStream = session->receiveResponse(response);
+    Poco::StreamCopier::copyStream(responseStream, actualStream);
+
+    // Remove the temp files.
+    FileUtil::removeFile(srcPath);
+
+    std::string actualString = actualStream.str();
+    std::string expectedString = " { \"DocStructure\": { \"ContentControls.ByIndex.0\": { \"id\": -428815899, \"tag\": \"machine-readable\", \"alias\": \"Human Readable\", \"content\": \"plain text value\", \"type\": \"plain-text\"}, \"ContentControls.ByIndex.1\": { \"id\": -1833055349, \"tag\": \"name\", \"alias\": \"Name\", \"content\": \"\", \"type\": \"plain-text\"}}}";
+
+    LOK_ASSERT(actualString == expectedString);
+}
+
+void HTTPServerTest::testTransformDocStructure()
+{
+    const char *testname = "testTransformDocStructure";
+    {
+        const std::string srcPath = helpers::getTempFileCopyPath(TDOC, "docStructure.docx", "docStructure_");
+        std::unique_ptr<Poco::Net::HTTPClientSession> session(helpers::createSession(_uri));
+        session->setTimeout(Poco::Timespan(COMMAND_TIMEOUT_SECS * 2, 0)); // 10 seconds.
+
+        TST_LOG("transform-document-structure");
+
+        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, "/cool/transform-document-structure");
+        Poco::Net::HTMLForm form;
+        form.setEncoding(Poco::Net::HTMLForm::ENCODING_MULTIPART);
+        form.set("format", "docx");
+        form.set("transform", "{\"Transforms\":{\"ContentControls.ByIndex.0\":{\"content\":\"Short text\"}}}");
+        form.addPart("data", new Poco::Net::FilePartSource(srcPath));
+        form.prepareSubmit(request);
+        try
+        {
+            form.write(session->sendRequest(request));
+        }
+        catch (const std::exception& ex)
+        {
+            // In case the server is still starting up.
+            sleep(COMMAND_TIMEOUT_SECS);
+            form.write(session->sendRequest(request));
+        }
+
+        Poco::Net::HTTPResponse response;
+        std::stringstream actualStream;
+        std::istream& responseStream = session->receiveResponse(response);
+        Poco::StreamCopier::copyStream(responseStream, actualStream);
+
+        // Remove the temp files.
+        FileUtil::removeFile(srcPath);
+
+        std::string actualString = actualStream.str();
+
+        std::ofstream fileStream(TDOC "/docStructureTransformed.docx");
+        fileStream << actualString;
+    }
+    //To check the result, extract Document Structure
+    {
+        const std::string srcPath2 = helpers::getTempFileCopyPath(TDOC, "docStructureTransformed.docx", "docStructureTransformed_");
+        std::unique_ptr<Poco::Net::HTTPClientSession> session(helpers::createSession(_uri));
+        session->setTimeout(Poco::Timespan(COMMAND_TIMEOUT_SECS * 2, 0)); // 10 seconds.
+
+        TST_LOG("transform-document-structure-check");
+
+        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, "/cool/extract-document-structure");
+        Poco::Net::HTMLForm form;
+        form.setEncoding(Poco::Net::HTMLForm::ENCODING_MULTIPART);
+        form.set("format", "docx");
+        form.addPart("data", new Poco::Net::FilePartSource(srcPath2));
+        form.prepareSubmit(request);
+        try
+        {
+            form.write(session->sendRequest(request));
+        }
+        catch (const std::exception& ex)
+        {
+            // In case the server is still starting up.
+            sleep(COMMAND_TIMEOUT_SECS);
+            form.write(session->sendRequest(request));
+        }
+
+        Poco::Net::HTTPResponse response;
+        std::stringstream actualStream;
+        std::istream& responseStream = session->receiveResponse(response);
+        Poco::StreamCopier::copyStream(responseStream, actualStream);
+
+        // Remove the temp files.
+        FileUtil::removeFile(srcPath2);
+
+        std::string actualString = actualStream.str();
+        std::string expectedString = " { \"DocStructure\": { \"ContentControls.ByIndex.0\": { \"id\": -428815899, \"tag\": \"machine-readable\", \"alias\": \"Human Readable\", \"content\": \"Short text\", \"type\": \"plain-text\"}, \"ContentControls.ByIndex.1\": { \"id\": -1833055349, \"tag\": \"name\", \"alias\": \"Name\", \"content\": \"\", \"type\": \"plain-text\"}}}";
+
+        LOK_ASSERT(actualString == expectedString);
     }
 }
 

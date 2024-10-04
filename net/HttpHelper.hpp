@@ -11,11 +11,11 @@
 
 #pragma once
 
-#include "Util.hpp"
+#include <common/Uri.hpp>
+#include <HttpRequest.hpp>
+
 #include <memory>
 #include <string>
-
-#include <HttpRequest.hpp>
 
 class StreamSocket;
 
@@ -34,7 +34,12 @@ void sendErrorAndShutdown(http::StatusCode errorCode, const std::shared_ptr<Stre
 /// Sends file as HTTP response and shutdown the socket.
 void sendFileAndShutdown(const std::shared_ptr<StreamSocket>& socket, const std::string& path,
                          http::Response& response,
-                         bool noCache = false, bool deflate = false, const bool headerOnly = false);
+                         const bool noCache = false, const bool deflate = false, const bool headerOnly = false);
+
+/// Sends file as HTTP response.
+void sendFile(const std::shared_ptr<StreamSocket>& socket, const std::string& path,
+              http::Response& response,
+              const bool noCache = false, const bool deflate = false, const bool headerOnly = false);
 
 /// Verifies that the given WOPISrc is properly URI-encoded.
 /// Warns if it isn't and, in debug builds, closes the socket (if given) and returns false.
@@ -46,7 +51,7 @@ inline bool verifyWOPISrc(const std::string& uri, const std::string& wopiSrc,
     // getQueryParameters(), which is used to extract wopiSrc, decodes the values.
     // Compare with the URI. WopiSrc is complex enough to require encoding.
     // But, if it matches, check if the WOPISrc actually needed encoding.
-    if (uri.find(wopiSrc) != std::string::npos && Util::needsURIEncoding(wopiSrc))
+    if (uri.find(wopiSrc) != std::string::npos && Uri::needsEncoding(wopiSrc))
     {
 #if !ENABLE_DEBUG
         (void)socket;

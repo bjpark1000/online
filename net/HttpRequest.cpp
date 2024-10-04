@@ -9,7 +9,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <config.h>
+#include "config.h"
 
 #include "HttpRequest.hpp"
 
@@ -221,7 +221,7 @@ FieldParseState StatusLine::parse(const char* p, int64_t& len)
     const int versionMaj = version[VersionMajPos] - '0';
     const int versionMin = version[VersionMinPos] - '0';
     // Version may not be null-terminated.
-    if (!Util::startsWith(std::string(version, VersionLen), "HTTP/") ||
+    if (!std::string(version, VersionLen).starts_with("HTTP/") ||
         (versionMaj < 0 || versionMaj > 9) || version[VersionDotPos] != '.' ||
         (versionMin < 0 || versionMin > 9) || !isWhitespace(version[VersionBreakPos]))
     {
@@ -307,13 +307,9 @@ int64_t Request::readData(const char* p, const int64_t len)
     if (_stage == Stage::Header)
     {
         // First line is the status line.
-#if !MOBILEAPP
-        if (p == nullptr || len < MinRequestHeaderLen)
-#else
         // Fix infinite loop on mobile by skipping the minimum request header
         // length check
-        if (p == nullptr)
-#endif
+        if (p == nullptr || (len < MinRequestHeaderLen && !Util::isMobileApp()))
         {
             LOG_TRC("Request::readData: len < MinRequestHeaderLen");
             return 0;
@@ -359,7 +355,7 @@ int64_t Request::readData(const char* p, const int64_t len)
         const int versionMaj = version[VersionMajPos] - '0';
         const int versionMin = version[VersionMinPos] - '0';
         // Version may not be null-terminated.
-        if (!Util::startsWith(std::string(version, VersionLen), "HTTP/") ||
+        if (!std::string(version, VersionLen).starts_with("HTTP/") ||
             (versionMaj < 0 || versionMaj > 9) || version[VersionDotPos] != '.' ||
             (versionMin < 0 || versionMin > 9) || !isWhitespace(version[VersionBreakPos]))
         {

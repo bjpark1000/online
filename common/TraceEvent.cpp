@@ -8,6 +8,8 @@
 // To build a freestanding test executable for just Tracevent:
 // clang++ -Wall -Wextra -DTEST_TRACEEVENT_EXE TraceEvent.cpp -o TraceEvent -pthread
 
+#include "config.h"
+
 #include <cassert>
 #include <mutex>
 #include <sstream>
@@ -61,32 +63,36 @@ void ProfileZone::emitRecording()
     if (!recordingOn)
         return;
 
-    auto now = std::chrono::system_clock::now();
-
     // Generate a single "Complete Event" (type X)
-    auto duration = now - _createTime;
+    const auto duration = std::chrono::system_clock::now() - _createTime;
 
-    std::string recordingData(
-        "{"
-        "\"name\":\""
-        + std::string(_name)
-        + "\","
-          "\"ph\":\"X\","
-          "\"ts\":"
-        + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(
-                             _createTime.time_since_epoch())
-                             .count())
-        + ","
-          "\"dur\":"
-        + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(duration).count())
-        + ","
-          "\"pid\":"
-        + std::to_string(_pid)
-        + ","
-          "\"tid\":"
-        + std::to_string(getThreadId())
-        + (_args.length() == 0 ? "" : ",\"args\":" + _args)
-        + "},");
+    std::ostringstream oss;
+    oss << "{"
+           "\"name\":\""
+        << name()
+        << "\","
+           "\"ph\":\"X\","
+           "\"ts\":"
+        << std::chrono::duration_cast<std::chrono::microseconds>(_createTime.time_since_epoch())
+               .count()
+        << ","
+           "\"dur\":"
+        << std::chrono::duration_cast<std::chrono::microseconds>(duration).count()
+        << ","
+           "\"pid\":"
+        << pid()
+        << ","
+           "\"tid\":"
+        << getThreadId();
+
+    if (!args().empty())
+    {
+        oss << ",\"args\":" << args();
+    }
+
+    oss << "},";
+    std::string recordingData = oss.str();
+
     std::lock_guard<std::mutex> guard(mutex);
     emitOneRecording(recordingData);
 }

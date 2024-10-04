@@ -17,6 +17,10 @@ L.Control.DocumentNameInput = L.Control.extend({
 
 	onAdd: function (map) {
 		this.map = map;
+		if (window.mode.isMobile())
+			this.progressBar = document.getElementById('mobile-progress-bar');
+		else
+			this.progressBar = document.getElementById('document-name-input-progress-bar');
 
 		map.on('doclayerinit', this.onDocLayerInit, this);
 		map.on('wopiprops', this.onWopiProps, this);
@@ -140,9 +144,11 @@ L.Control.DocumentNameInput = L.Control.extend({
 	},
 
 	onWopiProps: function(e) {
-		if (e.BaseFileName !== null)
+		if (e.BaseFileName !== null) {
 			// set the document name into the name field
 			$('#document-name-input').val(e.BreadcrumbDocName !== undefined ? e.BreadcrumbDocName : e.BaseFileName);
+			this.map.uiManager.enableTooltip($('#document-name-input'));
+		}
 		if (!e.UserCanNotWriteRelative && !this.map.isReadOnlyMode()) {
 			// Save As allowed
 			this.enableDocumentNameInput();
@@ -151,9 +157,23 @@ L.Control.DocumentNameInput = L.Control.extend({
 		}
 	},
 
+	showProgressBar: function() {
+		this.disableDocumentNameInput();
+		this.progressBar.style.display = 'block';
+	},
+
+	hideProgressBar: function() {
+		this.enableDocumentNameInput();
+		this.progressBar.style.display = 'none';
+	},
+
+	setProgressBarValue: function(value) {
+		this.progressBar.value = value;
+	},
+
 	showLoadingAnimation : function() {
 		this.disableDocumentNameInput();
-		$('#document-name-input-loading-bar').css('display', 'block');	
+		$('#document-name-input-loading-bar').css('display', 'block');
 	},
 
 	hideLoadingAnimation : function() {

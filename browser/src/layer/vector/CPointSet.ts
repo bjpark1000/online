@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 /*
  * CPointSet is a recursive datastructure used to represent a set of points connected by lines.
  * This is used by CPolyline and hence CPolygon classes to represent set of disconnected/disjoint

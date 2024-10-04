@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- tab-width: 4; indent-tabs-mode: nil; py-indent-offset: 4 -*-
 #
+# Copyright the Collabora Online contributors.
+#
+# SPDX-License-Identifier: MPL-2.0
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -138,7 +142,7 @@ def extractToolbarCommands(path):
         if line.find("_UNO(") >= 0:
             commands += commandFromMenuLine(line)
 
-    f = open(path + '/browser/src/control/Control.MobileTopBar.js', 'r', encoding='utf-8')
+    f = open(path + '/browser/src/control/Control.MobileTopBar.ts', 'r', encoding='utf-8')
     for line in f:
         if line.find("_UNO(") >= 0:
             commands += commandFromMenuLine(line)
@@ -185,7 +189,7 @@ def extractToolbarCommands(path):
         if line.find("_UNO(") >= 0:
             commands += commandFromMenuLine(line)
 
-    f = open(path + '/browser/src/control/Control.SearchBar.js', 'r', encoding='utf-8')
+    f = open(path + '/browser/src/control/Control.MobileSearchBar.ts', 'r', encoding='utf-8')
     for line in f:
         if line.find("_UNO(") >= 0:
             commands += commandFromMenuLine(line)
@@ -327,6 +331,9 @@ window._UNO = function(string, component, isContext) {
 \tvar entry = unoCommandsArray[command];
 \tif (entry === undefined) {
 \t\treturn command;
+\t}
+\tif (component == 'drawing') {
+\t\tcomponent = 'presentation';
 \t}
 \tvar componentEntry = entry[component];
 \tif (componentEntry === undefined) {

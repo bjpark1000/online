@@ -23,16 +23,47 @@
 #include <sstream>
 #include <string>
 
-#include <Poco/Logger.h>
-
 #ifdef __ANDROID__
 #include <android/log.h>
 #endif
 
 #include "Util.hpp"
+#include "StateEnum.hpp"
 
 namespace Log
 {
+    enum Level
+    {
+        FTL = 1, // Fatal
+        CTL,     // Critical
+        ERR,     // Error
+        WRN,     // Warning
+        NTC,     // Notice
+        INF,     // Information
+        DBG,     // Debug
+        TRC,     // Trace
+        MAX
+    };
+
+    // Different logging domains
+    STATE_ENUM(Area,
+               Generic,
+               Pixel,
+               Socket,
+               WebSocket,
+               Http,
+               WebServer,
+               Storage,
+               WOPI,
+               Admin,
+               Javascript);
+
+    // Types of phases for unit test
+    STATE_ENUM(Phase,
+               Setup,
+               Load,
+               Edit);
+
     /// Initialize the logging system.
     void initialize(const std::string& name,
                     const std::string& logLevel,
@@ -40,22 +71,13 @@ namespace Log
                     const bool logToFile,
                     const std::map<std::string, std::string>& config);
 
-    /// Returns the underlying logging system. Return value is effectively thread-local.
-    Poco::Logger& logger();
-
     /// Shutdown and release the logging system.
     void shutdown();
 
+    /// Cleanup state after forking
+    void postFork();
+
     void setThreadLocalLogLevel(const std::string& logLevel);
-
-#if !MOBILEAPP
-    extern bool IsShutdown;
-
-    /// Was static shutdown() called? If so, producing more logs should be avoided.
-    inline bool isShutdownCalled() { return IsShutdown; }
-#else
-    constexpr bool isShutdownCalled() { return false; }
-#endif
 
     /// Generates log entry prefix. Example follows (without the pipes).
     /// |wsd-07272-07298 2020-04-25 17:29:28.928697 -0400 [ websrv_poll ] TRC  |
@@ -70,111 +92,32 @@ namespace Log
         return prefix(tv, buffer, level);
     }
 
-    inline bool traceEnabled() { return logger().trace(); }
-    inline bool debugEnabled() { return logger().debug(); }
-    inline bool infoEnabled() { return logger().information(); }
-    inline bool warnEnabled() { return logger().warning(); }
-    inline bool errorEnabled() { return logger().error(); }
-    inline bool fatalEnabled() { return logger().fatal(); }
+    /// is a certain level of logging enabled ?
+    bool isEnabled(Level l, Area a = Area::Generic);
 
-    const std::string& getLevel();
-
-    /// The following is to write streaming logs.
-    /// Log::info() << "Value: 0x" << std::hex << value
-    ///             << ", pointer: " << this << Log::end;
-    static const struct _end_marker
+    inline bool traceEnabled()
     {
-        _end_marker()
-        {
-        }
-    } end;
-
-    /// Helper class to support implementing streaming
-    /// operator for logging.
-    class StreamLogger
-    {
-    public:
-        /// No-op instance.
-        StreamLogger()
-          : _enabled(false)
-        {
-        }
-
-        StreamLogger(std::function<void(const std::string&)> func, const char*level)
-          : _func(std::move(func)),
-            _enabled(true)
-        {
-            char buffer[1024];
-            _stream << prefix<sizeof(buffer) - 1>(buffer, level);
-        }
-
-        StreamLogger(StreamLogger&& sl) noexcept
-          : _stream(sl._stream.str()),
-            _func(std::move(sl._func)),
-            _enabled(sl._enabled)
-        {
-        }
-
-        bool enabled() const { return _enabled; }
-
-        void flush() const
-        {
-            if (_enabled)
-            {
-                _func(_stream.str());
-            }
-        }
-
-        std::ostringstream& getStream() { return _stream; }
-
-    private:
-        std::ostringstream _stream;
-
-        std::function<void(const std::string&)> _func;
-        const bool _enabled;
-    };
-
-    inline StreamLogger trace()
-    {
-        return traceEnabled()
-             ? StreamLogger([](const std::string& msg) { logger().trace(msg); }, "TRC")
-             : StreamLogger();
+        return isEnabled(Log::Level::TRC);
     }
 
-    inline StreamLogger debug()
-    {
-        return debugEnabled()
-             ? StreamLogger([](const std::string& msg) { logger().debug(msg); }, "DBG")
-             : StreamLogger();
-    }
+    /// Main entry function for all logging
+    void log(Level l, const std::string &text);
 
-    inline StreamLogger info()
-    {
-        return infoEnabled()
-             ? StreamLogger([](const std::string& msg) { logger().information(msg); }, "INF")
-             : StreamLogger();
-    }
+    /// Setting the logging level
+    void setLevel(const std::string &l);
 
-    inline StreamLogger warn()
-    {
-        return warnEnabled()
-             ? StreamLogger([](const std::string& msg) { logger().warning(msg); }, "WRN")
-             : StreamLogger();
-    }
+    /// Set disabled areas
+    void setDisabledAreas(const std::string &areas);
 
-    inline StreamLogger error()
-    {
-        return errorEnabled()
-             ? StreamLogger([](const std::string& msg) { logger().error(msg); }, "ERR")
-             : StreamLogger();
-    }
+    /// Getting the logging level
+    Level getLevel();
 
-    inline StreamLogger fatal()
-    {
-        return fatalEnabled()
-             ? StreamLogger([](const std::string& msg) { logger().fatal(msg); }, "FTL")
-             : StreamLogger();
-    }
+    std::string getLogLevelName(const std::string &channel);
+    void setLogLevelByName(const std::string &channel,
+                           const std::string &level);
+
+    /// Getting the logging level as a string
+    const std::string& getLevelName();
 
     /// Dump the invalid id as 0, otherwise dump in hex.
     /// Note: std::thread::id defines operator<< which
@@ -192,39 +135,6 @@ namespace Log
     }
 
 } // namespace Log
-
-template <typename U> Log::StreamLogger& operator<<(Log::StreamLogger& lhs, const U& rhs)
-{
-    if (lhs.enabled())
-    {
-        lhs.getStream() << rhs;
-    }
-
-    return lhs;
-}
-
-template <typename U> Log::StreamLogger& operator<<(Log::StreamLogger&& lhs, U&& rhs)
-{
-    if (lhs.enabled())
-    {
-        lhs.getStream() << rhs;
-    }
-
-    return lhs;
-}
-
-inline Log::StreamLogger& operator<<(Log::StreamLogger& lhs,
-                                     const std::chrono::system_clock::time_point& rhs)
-{
-    if (lhs.enabled())
-    {
-        lhs.getStream() << Util::getIso8601FracformatTime(rhs);
-    }
-
-    return lhs;
-}
-
-inline void operator<<(Log::StreamLogger& lhs, const Log::_end_marker&) { lhs.flush(); }
 
 /// A default implementation that is a NOP.
 /// Any context can implement this to prefix its log entries.
@@ -264,122 +174,69 @@ static constexpr std::size_t skipPathPrefix(const char (&s)[N], std::size_t n = 
 
 #ifdef __ANDROID__
 
-#define LOG_LOG(LOG, PRIO, LVL, STR)                                                               \
-    ((void)__android_log_print(ANDROID_LOG_DEBUG, "coolwsd", "%s %s", LVL, STR.c_str()))
-
+#define LOG_LOG(LVL, STR) \
+    ((void)__android_log_print(ANDROID_LOG_DEBUG, \
+                               "coolwsd", "%s %s", #LVL, STR.c_str()))
 #else
 
-#define LOG_LOG(LOG, PRIO, LVL, STR)                                                               \
-    LOG.log(Poco::Message(LOG.name(), STR, Poco::Message::PRIO_##PRIO))
-
+#define LOG_LOG(LVL, STR)  Log::log(Log::LVL, STR)
 #endif
 
 #define LOG_END_NOFILE(LOG) (void)0
 
 #define LOG_END(LOG) LOG << "| " << LOG_FILE_NAME(__FILE__) << ":" STRING(__LINE__)
 
-/// Used to end multi-statement logging via Log::StreamLogger.
-#define LOG_END_FLUSH(LOG)                                                                         \
-    do                                                                                             \
-    {                                                                                              \
-        LOG_END(LOG);                                                                              \
-        LOG.flush();                                                                               \
+#define LOG_MESSAGE_(LVL, A, X, PREFIX, SUFFIX)  \
+    do                                          \
+    {                                           \
+        if (LOG_CONDITIONAL(LVL, A))              \
+        {                                       \
+            LOG_BODY_(LVL, X, PREFIX, SUFFIX);    \
+        }                                       \
     } while (false)
 
-#define LOG_BODY_(LOG, PRIO, LVL, X, PREFIX, END)                                                  \
-    char b_[1024];                                                                                 \
-    std::ostringstream oss_(Log::prefix<sizeof(b_) - 1>(b_, LVL), std::ostringstream::ate);        \
-    PREFIX(oss_);                                                                                  \
-    oss_ << std::boolalpha << X;                                                                   \
-    END(oss_);                                                                                     \
-    LOG_LOG(LOG, PRIO, LVL, oss_.str())
 
-#define LOG_ANY(X)                                                                                 \
-    char b_[1024];                                                                                 \
-    std::ostringstream oss_(Log::prefix<sizeof(b_) - 1>(b_, "INF"), std::ostringstream::ate);      \
-    logPrefix(oss_);                                                                               \
-    oss_ << std::boolalpha << X;                                                                   \
-    LOG_END(oss_);                                                                                 \
-    Poco::AutoPtr<Poco::Channel> channel = Log::logger().getChannel();                             \
-    channel->log(Poco::Message("", oss_.str(), Poco::Message::Priority::PRIO_INFORMATION))
+#define LOG_BODY_(LVL, X, PREFIX, END)        \
+    char b_[1024];                              \
+    std::ostringstream oss_(                    \
+        Log::prefix<sizeof(b_) - 1>(b_, #LVL),  \
+        std::ostringstream::ate);               \
+    PREFIX(oss_);                               \
+    oss_ << std::boolalpha << X;                \
+    END(oss_);                                  \
+    LOG_LOG(LVL, oss_.str())
+
+#define LOG_ANY(X)                              \
+    char b_[1024];                              \
+    std::ostringstream oss_(                    \
+        Log::prefix<sizeof(b_) - 1>(b_, "INF"), \
+        std::ostringstream::ate);               \
+    logPrefix(oss_);                            \
+    oss_ << std::boolalpha << X;                \
+    LOG_END(oss_);                              \
+    Log::log(Log::Level::INF, oss_.str());
 
 #if defined __GNUC__ || defined __clang__
-#  define LOG_CONDITIONAL(log,type)                                                                \
-    __builtin_expect((!Log::isShutdownCalled() && log.type()), 0)
+#  define LOG_CONDITIONAL(type, area)  \
+    __builtin_expect(Log::isEnabled(Log::Level::type, Log::Area::area), 0)
 #else
-#  define LOG_CONDITIONAL(log,type)                                                                \
-    (!Log::isShutdownCalled() && log.type())
+#  define LOG_CONDITIONAL(type) Log::isEnabled(Log::Level::type, Log::Level::area)
 #endif
 
-#define LOG_TRC(X)                                                                                 \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, trace))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, TRACE, "TRC", X, logPrefix, LOG_END);                                  \
-        }                                                                                          \
-    } while (false)
+#define LOG_TRC(X)        LOGA_TRC(Generic, X)
+#define LOG_TRC_NOFILE(X) LOGA_TRC_NOFILE(Generic, X)
+#define LOG_DBG(X)        LOGA_DBG(Generic, X)
+#define LOG_INF(X)        LOGA_INF(Generic, X)
+#define LOG_INF_NOFILE(X) LOGA_INF_NOFILE(Generic, X)
+#define LOG_WRN(X)        LOG_MESSAGE_(WRN, Generic, X, logPrefix, LOG_END)
+#define LOG_ERR(X)        LOG_MESSAGE_(ERR, Generic, X, logPrefix, LOG_END)
 
-#define LOG_TRC_NOFILE(X)                                                                          \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, trace))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, TRACE, "TRC", X, logPrefix, LOG_END_NOFILE);                           \
-        }                                                                                          \
-    } while (false)
-
-#define LOG_DBG(X)                                                                                 \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, debug))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, DEBUG, "DBG", X, logPrefix, LOG_END);                                  \
-        }                                                                                          \
-    } while (false)
-
-#define LOG_INF(X)                                                                                 \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, information))                                                    \
-        {                                                                                          \
-            LOG_BODY_(log_, INFORMATION, "INF", X, logPrefix, LOG_END);                            \
-        }                                                                                          \
-    } while (false)
-
-#define LOG_INF_NOFILE(X)                                                                          \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, information))                                                    \
-        {                                                                                          \
-            LOG_BODY_(log_, INFORMATION, "INF", X, logPrefix, LOG_END_NOFILE);                     \
-        }                                                                                          \
-    } while (false)
-
-#define LOG_WRN(X)                                                                                 \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, warning))                                                        \
-        {                                                                                          \
-            LOG_BODY_(log_, WARNING, "WRN", X, logPrefix, LOG_END);                                \
-        }                                                                                          \
-    } while (false)
-
-#define LOG_ERR(X)                                                                                 \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, error))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, ERROR, "ERR", X, logPrefix, LOG_END);                                  \
-        }                                                                                          \
-    } while (false)
+#define LOGA_TRC(A,X)        LOG_MESSAGE_(TRC, A, X, logPrefix, LOG_END)
+#define LOGA_TRC_NOFILE(A,X) LOG_MESSAGE_(TRC, A, X, logPrefix, LOG_END_NOFILE)
+#define LOGA_DBG(A,X)        LOG_MESSAGE_(DBG, A, X, logPrefix, LOG_END)
+#define LOGA_INF(A,X)        LOG_MESSAGE_(INF, A, X, logPrefix, LOG_END)
+#define LOGA_INF_NOFILE(A,X) LOG_MESSAGE_(INF, A, X, logPrefix, LOG_END_NOFILE)
+// WRN and ERR should not be filtered by area
 
 /// Log an ERR entry with the given errno appended.
 #define LOG_SYS_ERRNO(ERRNO, X)                                                                    \
@@ -398,10 +255,9 @@ static constexpr std::size_t skipPathPrefix(const char (&s)[N], std::size_t n = 
     do                                                                                             \
     {                                                                                              \
         std::cerr << X << std::endl;                                                               \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, fatal))                                                          \
+        if (LOG_CONDITIONAL(FTL, Generic))                                      \
         {                                                                                          \
-            LOG_BODY_(log_, FATAL, "FTL", X, logPrefix, LOG_END);                                  \
+            LOG_BODY_(FTL, X, logPrefix, LOG_END);  \
         }                                                                                          \
     } while (false)
 
@@ -414,60 +270,12 @@ static constexpr std::size_t skipPathPrefix(const char (&s)[N], std::size_t n = 
         LOG_FTL(X << " (" << Util::symbolicErrno(onrre) << ": " << std::strerror(onrre) << ')');   \
     } while (false)
 
-/// No-prefix version of LOG_TRC.
-#define LOG_TRC_S(X)                                                                               \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, debug))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, TRACE, "TRC", X, (void), LOG_END);                                     \
-        }                                                                                          \
-    } while (false)
-
-/// No-prefix version of LOG_DBG.
-#define LOG_DBG_S(X)                                                                               \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, debug))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, DEBUG, "DBG", X, (void), LOG_END);                                     \
-        }                                                                                          \
-    } while (false)
-
-/// No-prefix version of LOG_INF.
-#define LOG_INF_S(X)                                                                               \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, error))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, INFORMATION, "INF", X, (void), LOG_END);                               \
-        }                                                                                          \
-    } while (false)
-
-/// No-prefix version of LOG_WRN.
-#define LOG_WRN_S(X)                                                                               \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, error))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, WARNING, "WRN", X, (void), LOG_END);                                   \
-        }                                                                                          \
-    } while (false)
-
-/// No-prefix version of LOG_ERR.
-#define LOG_ERR_S(X)                                                                               \
-    do                                                                                             \
-    {                                                                                              \
-        auto& log_ = Log::logger();                                                                \
-        if (LOG_CONDITIONAL(log_, error))                                                          \
-        {                                                                                          \
-            LOG_BODY_(log_, ERROR, "ERR", X, (void), LOG_END);                                     \
-        }                                                                                          \
-    } while (false)
+/// No-prefix versions:
+#define LOG_TRC_S(X) LOG_MESSAGE_(TRC, Generic, X, (void), LOG_END)
+#define LOG_DBG_S(X) LOG_MESSAGE_(DBG, Generic, X, (void), LOG_END)
+#define LOG_INF_S(X) LOG_MESSAGE_(INF, Generic, X, (void), LOG_END)
+#define LOG_WRN_S(X) LOG_MESSAGE_(WRN, Generic, X, (void), LOG_END)
+#define LOG_ERR_S(X) LOG_MESSAGE_(ERR, Generic, X, (void), LOG_END)
 
 #define LOG_CHECK(X)                                                                               \
     do                                                                                             \

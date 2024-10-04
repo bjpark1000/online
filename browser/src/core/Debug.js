@@ -16,9 +16,11 @@
  * - Ctrl+Shift+Alt+D (Map.Keyboard.js _handleCtrlCommand)
  * - Help > About > D (Toolbar.js aboutDialogKeyHandler)
  * - Help > About > Triple Click (Toolbar.js aboutDialogClickHandler)
+ * - &debug=true URL parameter (Map.js initialize)
+ * - &randomUser=true URL parameter (global.js)
  */
 
-/* global app L _ */
+/* global app L _ InvalidationRectangleSection */
 
 L.DebugManager = L.Class.extend({
 	initialize: function(map) {
@@ -60,6 +62,15 @@ L.DebugManager = L.Class.extend({
 		// if the user is not active
 		this._automatedUserQueue = [];
 		this._automatedUserTasks = {};
+
+		// Display debug info in About box
+		const wopiHostId = document.getElementById('wopi-host-id-cloned');
+		if (wopiHostId)
+			wopiHostId.style.display = 'block';
+
+		const servedBy = document.getElementById('served-by-cloned');
+		if (servedBy)
+			servedBy.style.display = 'flex';
 	},
 
 	_stop: function() {
@@ -75,6 +86,15 @@ L.DebugManager = L.Class.extend({
 			this._controls[category].remove();
 		}
 		this._controls = {};
+
+		// Hide debug info in About box
+		const wopiHostId = document.getElementById('wopi-host-id-cloned');
+		if (wopiHostId)
+			wopiHostId.style.display = 'none';
+
+		const servedBy = document.getElementById('served-by-cloned');
+		if (servedBy)
+			servedBy.style.display = 'none';
 	},
 
 	_addDebugTool: function (tool) {
@@ -148,13 +168,10 @@ L.DebugManager = L.Class.extend({
 			startsOn: false,
 			onAdd: function () {
 				self.tileInvalidationsOn = true;
-				self._tileInvalidationRectangles = {};
 				self._tileInvalidationMessages = {};
 				self._tileInvalidationId = 0;
 				self._tileInvalidationKeypressQueue = [];
 				self._tileInvalidationKeypressTimes = self.getTimeArray();
-				self._tileInvalidationLayer = new L.LayerGroup();
-				self._map.addLayer(self._tileInvalidationLayer);
 				self._tileInvalidationTimeout();
 			},
 			onRemove: function () {
@@ -162,7 +179,6 @@ L.DebugManager = L.Class.extend({
 				self.clearOverlayMessage('tileInvalidationMessages');
 				self.clearOverlayMessage('tileInvalidationTime');
 				clearTimeout(self._tileInvalidationTimeoutId);
-				self._map.removeLayer(self._tileInvalidationLayer);
 				self._painter.update();
 			},
 		});
@@ -456,7 +472,7 @@ L.DebugManager = L.Class.extend({
 
 	_randomizeSettings: function() {
 		// Toggle dark mode
-		var isDark = this._map.uiManager.getDarkModeState();
+		var isDark = window.prefs.getBoolean('darkTheme');
 		if (Math.random() < 0.5) {
 			window.app.console.log('Randomize Settings: Toggle dark mode to ' + (isDark?'Light':'Dark'));
 			this._map.uiManager.toggleDarkMode();
@@ -515,6 +531,20 @@ L.DebugManager = L.Class.extend({
 		}
 
 		// Toggle sidebar
+		if (!this._map._docLoadedOnce) {
+			// When first opening the document, initializeSidebar is called
+			// 200ms after setup, which would overwrite our randomization.
+			// So in this case, wait for sidebar initialization and the
+			// response to complete so that we know the current state
+			setTimeout(this._randomizeSidebar.bind(this), 1000);
+		} else {
+			this._randomizeSidebar();
+		}
+
+		this._painter.update();
+	},
+
+	_randomizeSidebar: function() {
 		var sidebars = ['none','.uno:SidebarDeck.PropertyDeck','.uno:Navigator'];
 		if (this._docLayer.isImpress()) {
 			sidebars = sidebars.concat(['.uno:SlideChangeWindow','.uno:CustomAnimation','.uno:MasterSlidesPanel','.uno:ModifyPage']);
@@ -522,6 +552,7 @@ L.DebugManager = L.Class.extend({
 		var sidebar = sidebars[Math.floor(Math.random()*sidebars.length)];
 		window.app.console.log('Randomize Settings: Target sidebar: ' + sidebar);
 		if (this._map.sidebar && this._map.sidebar.isVisible()) {
+			// There is currently a sidebar
 			var currentSidebar = this._map.sidebar.getTargetDeck();
 			if (sidebar == 'none') {
 				window.app.console.log('Randomize Settings: Remove sidebar');
@@ -533,7 +564,9 @@ L.DebugManager = L.Class.extend({
 				window.app.console.log('Randomize Settings: Switch sidebar to ' + sidebar);
 				this._map.sendUnoCommand(sidebar);
 			}
-		} else { // eslint-disable-next-line no-lonely-if
+		} else {
+			// Sidebar currently hidden
+			// eslint-disable-next-line no-lonely-if
 			if (sidebar == 'none') {
 				window.app.console.log('Randomize Settings: Leave sidebar off');
 			} else {
@@ -541,8 +574,6 @@ L.DebugManager = L.Class.extend({
 				this._map.sendUnoCommand(sidebar);
 			}
 		}
-
-		this._painter.update();
 	},
 
 	_automatedUserAddTask: function(name, taskFn) {
@@ -685,42 +716,42 @@ L.DebugManager = L.Class.extend({
 			case 0:
 				window.app.console.log('Automated User: Resize row smaller');
 				// Not necessary here, but nice to highlight the row being changed
-				this._painter._sectionContainer.getSectionWithName('row header')._selectRow(1,0);
+				app.sectionContainer.getSectionWithName('row header')._selectRow(1,0);
 				this._map.sendUnoCommand('.uno:RowHeight {"RowHeight":{"type":"unsigned short","value":200},"Row":{"type":"long","value":2}}');
 				waitTime = 2000;
 				break;
 			case 1:
 				window.app.console.log('Automated User: Resize row larger');
 				// Not necessary here, but nice to highlight the row being changed
-				this._painter._sectionContainer.getSectionWithName('row header')._selectRow(1,0);
+				app.sectionContainer.getSectionWithName('row header')._selectRow(1,0);
 				this._map.sendUnoCommand('.uno:RowHeight {"RowHeight":{"type":"unsigned short","value":2000},"Row":{"type":"long","value":2}}');
 				waitTime = 2000;
 				break;
 			case 2:
 				window.app.console.log('Automated User: Resize row auto');
 				// Selecting row is necessary here
-				this._painter._sectionContainer.getSectionWithName('row header')._selectRow(1,0);
+				app.sectionContainer.getSectionWithName('row header')._selectRow(1,0);
 				this._map.sendUnoCommand('.uno:SetOptimalRowHeight {"aExtraHeight":{"type":"unsigned short","value":0}}');
 				waitTime = 2000;
 				break;
 			case 3:
 				window.app.console.log('Automated User: Resize column smaller');
 				// Not necessary here, but nice to highlight the column being changed
-				this._painter._sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
+				app.sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
 				this._map.sendUnoCommand('.uno:ColumnWidth {"ColumnWidth":{"type":"unsigned short","value":400},"Column":{"type":"long","value":2}}');
 				waitTime = 2000;
 				break;
 			case 4:
 				window.app.console.log('Automated User: Resize column larger');
 				// Not necessary here, but nice to highlight the column being changed
-				this._painter._sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
+				app.sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
 				this._map.sendUnoCommand('.uno:ColumnWidth {"ColumnWidth":{"type":"unsigned short","value":8000},"Column":{"type":"long","value":2}}');
 				waitTime = 2000;
 				break;
 			case 5:
 				window.app.console.log('Automated User: Resize column auto');
 				// Selecting column is necessary here
-				this._painter._sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
+				app.sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
 				this._map.sendUnoCommand('.uno:SetOptimalColumnWidthDirect {"aExtraHeight":{"type":"unsigned short","value":0}}');
 				waitTime = 2000;
 				break;
@@ -734,15 +765,15 @@ L.DebugManager = L.Class.extend({
 			case 0:
 				window.app.console.log('Automated User: Insert row');
 				// Select just this row first, doesn't work if multiple rows are selected
-				this._painter._sectionContainer.getSectionWithName('row header')._selectRow(1,0);
-				this._painter._sectionContainer.getSectionWithName('row header').insertRowAbove(1);
+				app.sectionContainer.getSectionWithName('row header')._selectRow(1,0);
+				app.sectionContainer.getSectionWithName('row header').insertRowAbove(1);
 				waitTime = 2000;
 				break;
 			case 1:
 				window.app.console.log('Automated User: Delete column');
 				// Select just this column first, doesn't work if multiple columns are selected
-				this._painter._sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
-				this._painter._sectionContainer.getSectionWithName('column header').insertColumnBefore(1);
+				app.sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
+				app.sectionContainer.getSectionWithName('column header').insertColumnBefore(1);
 				waitTime = 2000;
 				break;
 		}
@@ -755,15 +786,15 @@ L.DebugManager = L.Class.extend({
 			case 0:
 				window.app.console.log('Automated User: Delete row');
 				// Select just this row first, otherwise multiple rows could get deleted
-				this._painter._sectionContainer.getSectionWithName('row header')._selectRow(1,0);
-				this._painter._sectionContainer.getSectionWithName('row header').deleteRow(1);
+				app.sectionContainer.getSectionWithName('row header')._selectRow(1,0);
+				app.sectionContainer.getSectionWithName('row header').deleteRow(1);
 				waitTime = 2000;
 				break;
 			case 1:
 				window.app.console.log('Automated User: Delete column');
 				// Select just this column first, otherwise multiple columns could get deleted
-				this._painter._sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
-				this._painter._sectionContainer.getSectionWithName('column header').deleteColumn(1);
+				app.sectionContainer.getSectionWithName('column header')._selectColumn(1,0);
+				app.sectionContainer.getSectionWithName('column header').deleteColumn(1);
 				waitTime = 2000;
 				break;
 		}
@@ -842,13 +873,13 @@ L.DebugManager = L.Class.extend({
 		var updates = this._tileDataTotalUpdates;
 		var invalidates = this._tileDataTotalInvalidates;
 		this.setOverlayMessage('tileData',
-			'Total tile messages: ' + messages + '<br>' +
+			'Total tile messages: ' + messages + '\n' +
 			'loads: ' + loads + ' ' +
 			'deltas: ' + deltas + ' ' +
-			'updates: ' + updates + '<br>' +
-			'invalidates: ' + invalidates + '<br>' +
-			'<b>Tile update waste: ' + Math.round(100.0 * updates / (updates + deltas)) + '%</b>' + '<br>' +
-			'<b>New Tile ratio: ' + Math.round(100.0 * loads / (loads + updates + deltas)) + '%</b>'
+			'updates: ' + updates + '\n' +
+			'invalidates: ' + invalidates + '\n' +
+			'Tile update waste: ' + Math.round(100.0 * updates / (updates + deltas)) + '%\n' +
+			'New Tile ratio: ' + Math.round(100.0 * loads / (loads + updates + deltas)) + '%'
 			);
 	},
 
@@ -893,19 +924,9 @@ L.DebugManager = L.Class.extend({
 	},
 
 	_tileInvalidationTimeout: function() {
-		for (var key in this._tileInvalidationRectangles) {
-			var rect = this._tileInvalidationRectangles[key];
-			var opac = rect.options.fillOpacity;
-			if (opac <= 0.04) {
-				if (key < this._tileInvalidationId - 5) {
-					this._tileInvalidationLayer.removeLayer(rect);
-					delete this._tileInvalidationRectangles[key];
-					delete this._tileInvalidationMessages[key];
-				} else {
-					rect.setStyle({fillOpacity: 0, opacity: 1 - (this._tileInvalidationId - key) / 7});
-				}
-			} else {
-				rect.setStyle({fillOpacity: opac - 0.04});
+		for (var key in this._tileInvalidationMessages) {
+			if (key < this._tileInvalidationId - 5) {
+				delete this._tileInvalidationMessages[key];
 			}
 		}
 		this._tileInvalidationTimeoutId = setTimeout(L.bind(this._tileInvalidationTimeout, this), 50);
@@ -929,7 +950,7 @@ L.DebugManager = L.Class.extend({
 		var messages = '';
 		for (var i = this._tileInvalidationId - 1; i > this._tileInvalidationId - 6; i--) {
 			if (i >= 0 && this._tileInvalidationMessages[i]) {
-				messages += '' + i + ': ' + this._tileInvalidationMessages[i] + ' <br>';
+				messages += '' + i + ': ' + this._tileInvalidationMessages[i] + '\n';
 			}
 		}
 		this.setOverlayMessage('tileInvalidationMessages',messages);
@@ -945,18 +966,16 @@ L.DebugManager = L.Class.extend({
 		var absTopLeftTwips = L.point(topLeftTwips.x * signX, topLeftTwips.y);
 		var absBottomRightTwips = L.point(bottomRightTwips.x * signX, bottomRightTwips.y);
 
-		var invalidBoundCoords = new L.LatLngBounds(
-			this._docLayer._twipsToLatLng(absTopLeftTwips, this._docLayer._tileZoom),
-			this._docLayer._twipsToLatLng(absBottomRightTwips, this._docLayer._tileZoom)
-		);
-		var rect = L.rectangle(invalidBoundCoords, {color: 'red', weight: 1, opacity: 1, fillOpacity: 0.4, pointerEvents: 'none'});
-		this._tileInvalidationRectangles[this._tileInvalidationId] = rect;
 		this._tileInvalidationMessages[this._tileInvalidationId] = command;
 		this._tileInvalidationId++;
-		this._tileInvalidationLayer.addLayer(rect);
 
+		const x = absTopLeftTwips.x * app.twipsToPixels;
+		const y = absTopLeftTwips.y * app.twipsToPixels;
+		const w = (absBottomRightTwips.x - absTopLeftTwips.x) * app.twipsToPixels;
+		const h = (absBottomRightTwips.y - absTopLeftTwips.y) * app.twipsToPixels;
+		InvalidationRectangleSection.setRectangle(x, y, w, h);
 
-		// There is not always an invalidation for every keypress. 
+		// There is not always an invalidation for every keypress.
 		// Keypresses at the front of the queue that are older than 1s
 		// are probably stale and should be ignored.
 		var now = +new Date();

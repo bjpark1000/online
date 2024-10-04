@@ -10,21 +10,11 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 abs_top_builddir="${DIR}/.."
 systemplate_path="@SYSTEMPLATE_PATH@"
 enable_debug="@ENABLE_DEBUG@"
-if test -z "@ENABLE_SETCAP@"; then
-    capabilities=false
-else
-    capabilities=true
-fi
 jails_path="@JAILS_PATH@"
 lo_path="@LO_PATH@"
 valgrind_cmd="valgrind --tool=memcheck --trace-children=no -v --read-var-info=yes"
 verbose=''
-capabilities="@ENABLE_SETCAP@"
 fail_fast=''
-
-if test "h$capabilities" != "htrue"; then
-    capabilities=false
-fi
 
 # Note that these options are used by commands in the Makefile that
 # Automake generates. Don't be mislead by 'git grep' not showing any
@@ -81,7 +71,6 @@ echo > $tst_log
 if ${trace} \
        ${abs_top_builddir}/coolwsd --o:sys_template_path="$systemplate_path" \
 				   --o:child_root_path="$jails_path" \
-				   --o:security.capabilities="${capabilities}" \
 				   --o:storage.filesystem[@allow]=true \
 				   --o:logging.level=trace \
 				   --o:ssl.key_file_path="${abs_top_builddir}/etc/key.pem" \
@@ -89,6 +78,7 @@ if ${trace} \
 				   --o:ssl.ca_file_path="${abs_top_builddir}/etc/ca-chain.cert.pem" \
 				   --o:admin_console.username=admin --o:admin_console.password=admin \
 				   --o:storage.ssl.enable=false \
+				   --o:mount_namespaces[@default]=true \
 				   --o:experimental_features=true \
 				   --unattended \
 				   --unitlib="${abs_top_builddir}/test/.libs/$tst.so" 2> "$tst_log" 1>&2; then
@@ -97,12 +87,15 @@ if ${trace} \
 	exit 0
 else
 	echo "Test $tst FAILED. Finished in ${SECONDS}s."
-	cat $tst_log
+        if test $(stat -c %s $tst_log) -le 1000000000; then
+            cat $tst_log
+        else
+            echo "Not showing $tst_log, which is larger than 1GB in size."
+        fi
 	echo "============================================================="
 	echo "Test failed on $tst after ${SECONDS}s. Re-run with (remove --unattended to run without gdb and get prompted):"
 	echo "   $ gdb --args ${abs_top_builddir}/coolwsd --o:sys_template_path=\"$systemplate_path\" \\"
 	echo "         --o:child_root_path=\"$jails_path\" \\"
-	echo "         --o:security.capabilities=\"${capabilities}\" \\"
 	echo "         --o:storage.filesystem[@allow]=true \\"
 	echo "         --o:logging.level=error\\" # logs and gdb don't go well together
 	echo "         --o:ssl.key_file_path=\"${abs_top_builddir}/etc/key.pem\" \\"
@@ -110,6 +103,7 @@ else
 	echo "         --o:ssl.ca_file_path=\"${abs_top_builddir}/etc/ca-chain.cert.pem\" \\"
 	echo "         --o:admin_console.username=admin --o:admin_console.password=admin \\"
 	echo "         --o:storage.ssl.enable=false \\"
+	echo "         --o:mount_namespaces[@default]=true \\"
 	echo "         --unattended \\"
 	echo "         --unitlib=\"${abs_top_builddir}/test/.libs/$tst.so\""
 	echo ""

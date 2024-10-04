@@ -28,6 +28,8 @@
 #  error "include config.h for user id";
 #endif
 
+/*WARNING: PRIVILEGED CODE CHECKING START */
+
 inline int hasUID(const char *userId)
 {
     struct passwd *pw = getpwuid(getuid());
@@ -62,10 +64,9 @@ inline int isInContainer()
     return 0;
 }
 
-inline int hasCorrectUID(const char *appName)
+inline int hasCorrectUID([[maybe_unused]] const char* appName)
 {
 #if ENABLE_DEBUG
-    (void)appName;
     return 1; // insecure but easy to use.
 #else
     if (hasUID(COOL_USER_ID))
@@ -107,5 +108,29 @@ inline int hasAnyCapability()
     return 0;
 #endif
 }
+
+/** Drop all capabilities. return zero on success, negative on error. */
+inline int dropAllCapabilities()
+{
+#ifdef __linux__
+    cap_t caps = cap_init();
+    if (caps == nullptr)
+    {
+        fprintf(stderr, "Error: cap_init() failed.\n");
+        return -1;
+    }
+
+    if (cap_set_proc(caps) == -1)
+    {
+        fprintf(stderr, "Error: cap_set_proc() failed.\n");
+        return -1;
+    }
+
+    cap_free(caps);
+#endif
+    return 0;
+}
+
+/*WARNING: PRIVILEGED CODE CHECKING END */
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

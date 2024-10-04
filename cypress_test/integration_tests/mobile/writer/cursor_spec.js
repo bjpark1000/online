@@ -1,24 +1,19 @@
-/* global describe it require afterEach cy */
+/* global describe it require cy */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var writerHelper = require('../../common/writer_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Text cursor tests.', function() {
-	var testFileName;
 
-	function before(fileName) {
-		testFileName = helper.beforeAll(fileName, 'writer');
+	function before(filePath) {
+		helper.setupAndLoadDocument(filePath);
 
 		mobileHelper.enableEditingMobile();
 	}
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	it('Extensive cursor movements.', function() {
-		before('cursor.odt');
+		before('writer/cursor.odt');
 
 		for (var i = 0; i < 5; i++) {
 			helper.moveCursor('right');
@@ -29,7 +24,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Text cursor tests.', functi
 	});
 
 	it('View jumps by cursor movement.', function() {
-		before('cursor.odt');
+		before('writer/cursor.odt');
 
 		for (var i = 0; i < 5; i++) {
 			helper.moveCursor('end');
@@ -38,16 +33,16 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Text cursor tests.', functi
 	});
 
 	it('Cursor is visible after text selection.', function() {
-		before('cursor.odt');
+		before('writer/cursor.odt');
 		writerHelper.selectAllTextOfDoc();
 		cy.cGet('.blinking-cursor').should('be.visible');
 		// Blinking cursor and so the view should be at the end of the text selection.
-		cy.cGet('.leaflet-selection-marker-end').should('be.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('not.be.visible');
+		cy.cGet('.text-selection-handle-end').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('not.be.visible');
 	});
 
 	it('Move cursor through table.', function() {
-		before('cursor_in_table.odt');
+		before('writer/cursor_in_table.odt');
 
 		for (var i = 0; i < 5; i++) {
 			helper.moveCursor('down');

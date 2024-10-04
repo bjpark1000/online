@@ -44,6 +44,8 @@
 	justify-content: center;
 	gap: 5px;
 	flex-direction: column;
+	width: fit-content;
+	flex: 1 1 auto;
 }
 
 .readonly .document-title {
@@ -68,9 +70,12 @@
 	align-self: center;
 }
 
-@media screen and (max-width: 1238px) {
+@media screen and (max-width: 900px) {
 	.main-nav.hasnotebookbar:not(.readonly) #document-titlebar {
 		display: none;
+	}
+	.notebookbar-tabs-container {
+		flex: 1 1 auto !important;
 	}
 }
 

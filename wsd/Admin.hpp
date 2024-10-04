@@ -162,7 +162,8 @@ public:
     /// Attempt a synchronous connection to a monitor with @uri @when that future comes
     void scheduleMonitorConnect(const std::string &uri, std::chrono::steady_clock::time_point when);
 
-    void sendMetrics(const std::shared_ptr<StreamSocket>& socket, const std::shared_ptr<Poco::Net::HTTPResponse>& response);
+    void sendMetrics(const std::shared_ptr<StreamSocket>& socket,
+                     const std::shared_ptr<http::Response>& response);
 
     void setViewLoadDuration(const std::string& docKey, const std::string& sessionId, std::chrono::milliseconds viewLoadDuration);
     void setDocWopiDownloadDuration(const std::string& docKey, std::chrono::milliseconds wopiDownloadDuration);
@@ -181,6 +182,10 @@ public:
     }
 
     void routeTokenSanityCheck();
+
+    void sendShutdownReceivedMsg();
+
+    void setCloseMonitorFlag() { _closeMonitor = true; }
 
 private:
     /// Notify Forkit of changed settings.
@@ -247,6 +252,8 @@ private:
 
     // map to make sure only connection with unique monitor uri exists
     std::map<std::string, std::shared_ptr<MonitorSocketHandler>> _monitorSockets;
+
+    std::atomic<bool> _closeMonitor = false;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,34 +1,27 @@
-/* global describe it cy beforeEach require expect afterEach Cypress*/
+/* global describe it cy beforeEach require expect Cypress*/
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var impressHelper = require('../../common/impress_helper');
 
 describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() {
-	var origTestFileName = 'insertion_wizard.odp';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'impress');
+		helper.setupAndLoadDocument('impress/insertion_wizard.odp');
 
 		mobileHelper.enableEditingMobile();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	function selectionShouldBeTextShape(checkShape) {
 		// Check that the shape is there
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg')
+		cy.cGet('#document-container svg')
 			.should(function(svg) {
-				expect(svg[0].getBBox().width).to.be.greaterThan(0);
-				expect(svg[0].getBBox().height).to.be.greaterThan(0);
+				expect(parseInt(svg[0].style.width.replace('px', ''))).to.be.greaterThan(0);
+				expect(parseInt(svg[0].style.height.replace('px', ''))).to.be.greaterThan(0);
 			});
 
 		if (checkShape) {
-			cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g.Page g')
-				.should('be.visible');
+			cy.cGet('#document-container svg g.Page g').should('be.visible');
 		}
 
 		// Check also that the shape is fully visible
@@ -60,7 +53,7 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		// We can't use the menu item directly, because it would open file picker.
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Local Image...').should('be.visible');
 		cy.cGet('#insertgraphic[type=file]').attachFile('/mobile/impress/image_to_insert.png');
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g').should('exist');
+		cy.cGet('#document-container svg g').should('exist');
 	});
 
 	it('Insert comment.', function() {
@@ -120,14 +113,14 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		// Open hyperlink dialog
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Hyperlink...').click();
 		// Dialog is opened
-		cy.cGet('#hyperlink-link-box').should('exist');
+		cy.cGet('#hyperlink-link-box-input').should('exist');
 		// Type text and link
 		cy.cGet('#hyperlink-text-box').type('some text');
-		cy.cGet('#hyperlink-link-box').type('www.something.com');
+		cy.cGet('#hyperlink-link-box-input').type('www.something.com');
 		// Insert
 		cy.cGet('#response-ok').click();
 		// TODO: we have some wierd shape here instead of a text shape with the link
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g path.leaflet-interactive').should('exist');
+		cy.cGet('#document-container svg g').should('exist');
 	});
 
 	it('Insert shape.', function() {
@@ -135,25 +128,28 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Shape').click();
 		cy.cGet('.col.w2ui-icon.basicshapes_rectangle').click();
 		// Check that the shape is there
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g').should('exist');
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg')
+		cy.cGet('#document-container svg g').should('exist');
+		cy.cGet('#document-container svg')
 			.should(function(svg) {
-				expect(svg[0].getBBox().width).to.be.greaterThan(0);
-				expect(svg[0].getBBox().height).to.be.greaterThan(0);
+				expect(parseInt(svg[0].style.width.replace('px', ''))).to.be.greaterThan(0);
+				expect(parseInt(svg[0].style.height.replace('px', ''))).to.be.greaterThan(0);
 			});
 	});
 
 	it('Insert text box.', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Text Box').click();
 		// Check that the shape is there
 		selectionShouldBeTextShape();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('Tap to edit text');
 	});
 
 	it('Insert date field (fixed).', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Date (fixed)').click();
@@ -161,12 +157,14 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		selectionShouldBeTextShape(false);
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a date in MM/DD/YY format
 		var regex = /\d{1,2}[/]\d{1,2}[/]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert date field (variable).', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Date (variable)').click();
@@ -174,12 +172,14 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		selectionShouldBeTextShape(false);
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a date in MM/DD/YY format
 		var regex = /\d{1,2}[/]\d{1,2}[/]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert time field (fixed).', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Time (fixed)').click();
@@ -187,12 +187,14 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		selectionShouldBeTextShape(false);
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a time in HH/MM/SS format
 		var regex = /\d{1,2}[:]\d{1,2}[:]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert time field (variable).', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Time (variable)').click();
@@ -200,12 +202,14 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		selectionShouldBeTextShape(false);
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a time in HH/MM/SS format
 		var regex = /\d{1,2}[:]\d{1,2}[:]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert slide number.', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Slide Number').click();
@@ -213,10 +217,12 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		selectionShouldBeTextShape();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('1');
 	});
 
 	it('Insert slide title.', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Slide Title').click();
@@ -224,10 +230,12 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		selectionShouldBeTextShape();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('Slide 1');
 	});
 
 	it('Insert slide count.', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Slide Count').click();
@@ -235,102 +243,119 @@ describe(['tagmobile', 'tagnextcloud'], 'Impress insertion wizard.', function() 
 		selectionShouldBeTextShape();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('1');
 	});
 
 	it('Insert hyperlink inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		// Open hyperlink dialog
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Hyperlink...').click();
 		// Dialog is opened
-		cy.cGet('#hyperlink-link-box').should('exist');
+		cy.cGet('#hyperlink-link-box-input').should('exist');
 		// Type text and link
 		cy.cGet('#hyperlink-text-box').type('some text');
-		cy.cGet('#hyperlink-link-box').type('www.something.com');
+		cy.cGet('#hyperlink-link-box-input').type('www.something.com');
 		// Insert
 		cy.cGet('#response-ok').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('some text');
-		cy.cGet('.leaflet-popup-content a').should('have.text', 'http://www.something.com');
+		cy.cGet('.hyperlink-pop-up-container a').should('have.text', 'http://www.something.com');
 	});
 
 	it('Insert date field (fixed) inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Date (fixed)').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a date in MM/DD/YY format
 		var regex = /\d{1,2}[/]\d{1,2}[/]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert date field (variable) inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Date (variable)').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a date in MM/DD/YY format
 		var regex = /\d{1,2}[/]\d{1,2}[/]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert time field (fixed) inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Time (fixed)').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a time in HH/MM/SS format
 		var regex = /\d{1,2}[:]\d{1,2}[:]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert time field (variable) inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Time (variable)').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		// Check that we have a time in HH/MM/SS format
 		var regex = /\d{1,2}[:]\d{1,2}[:]\d{1,2}/;
 		helper.matchClipboardText(regex);
 	});
 
 	it('Insert slide number inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Slide Number').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('1');
 	});
 
 	it('Insert slide title inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Slide Title').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('Slide 1');
 	});
 
 	it('Insert slide count inside existing text shape.', function() {
+		helper.setDummyClipboardForCopy();
 		stepIntoTextShapeEditing();
 		mobileHelper.openInsertionWizard();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'More Fields...').click();
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Slide Count').click();
 		// Check the text
 		impressHelper.selectTextOfShape();
+		helper.copy();
 		helper.expectTextForClipboard('1');
 	});
 

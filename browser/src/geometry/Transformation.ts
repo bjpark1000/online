@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 declare var L: any;
 
 namespace cool {

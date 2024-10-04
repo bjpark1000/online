@@ -16,11 +16,20 @@
 
 #include <HttpRequest.hpp>
 #include <Socket.hpp>
-
-#include <Poco/MemoryStream.h>
-#include <Poco/Util/LayeredConfiguration.h>
+#include <COOLWSD.hpp>
 
 class RequestDetails;
+
+namespace Poco
+{
+namespace Net
+{
+class HTTPRequest;
+class HTTPResponse;
+class HTTPBasicCredentials;
+} // namespace Net
+
+} // namespace Poco
 
 /// Represents a file that is preprocessed for variable
 /// expansion/replacement before serving.
@@ -72,21 +81,52 @@ inline std::ostream& operator<<(std::ostream& os, const PreProcessedFile::Segmen
 /// Handles file requests over HTTP(S).
 class FileServerRequestHandler
 {
+public:
+    /// The WOPI URL and authentication details,
+    /// as extracted from the cool.html file-serving request.
+    class ResourceAccessDetails
+    {
+    public:
+        ResourceAccessDetails() = default;
+
+        ResourceAccessDetails(std::string wopiSrc, std::string accessToken, std::string permission)
+            : _wopiSrc(std::move(wopiSrc))
+            , _accessToken(std::move(accessToken))
+            , _permission(std::move(permission))
+        {
+        }
+
+        bool isValid() const { return !_wopiSrc.empty() && !_accessToken.empty(); }
+
+        const std::string wopiSrc() const { return _wopiSrc; }
+        const std::string accessToken() const { return _accessToken; }
+        const std::string permission() const { return _permission; }
+
+    private:
+        std::string _wopiSrc;
+        std::string _accessToken;
+        std::string _permission;
+    };
+
+private:
     friend class FileServeTests; // for unit testing
 
     static std::string getRequestPathname(const Poco::Net::HTTPRequest& request,
                                           const RequestDetails& requestDetails);
 
-    static void preprocessFile(const Poco::Net::HTTPRequest& request,
-                               const RequestDetails &requestDetails,
-                               Poco::MemoryInputStream& message,
-                               const std::shared_ptr<StreamSocket>& socket);
+    static ResourceAccessDetails preprocessFile(const Poco::Net::HTTPRequest& request,
+                                                http::Response& httpResponse,
+                                                const RequestDetails& requestDetails,
+                                                Poco::MemoryInputStream& message,
+                                                const std::shared_ptr<StreamSocket>& socket);
     static void preprocessWelcomeFile(const Poco::Net::HTTPRequest& request,
-                                      const RequestDetails &requestDetails,
+                                      http::Response& httpResponse,
+                                      const RequestDetails& requestDetails,
                                       Poco::MemoryInputStream& message,
                                       const std::shared_ptr<StreamSocket>& socket);
     static void preprocessAdminFile(const Poco::Net::HTTPRequest& request,
-                                    const RequestDetails &requestDetails,
+                                    http::Response& httpResponse,
+                                    const RequestDetails& requestDetails,
                                     const std::shared_ptr<StreamSocket>& socket);
 
     /// Construct a JSON to be accepted by the cool.html from a list like
@@ -100,28 +140,50 @@ class FileServerRequestHandler
 
     static std::string cssVarsToStyle(const std::string& cssVars);
 
-    static std::string stringifyBoolFromConfig(const Poco::Util::LayeredConfiguration& config,
-                                               std::string propertyName,
-                                               bool defaultValue);
-
 public:
     FileServerRequestHandler(const std::string& root);
     ~FileServerRequestHandler();
 
+    /// Evaluate if the cookie exists and returns it when it does.
+    static bool isAdminLoggedIn(const Poco::Net::HTTPRequest& request, std::string& jwtToken);
+
     /// Evaluate if the cookie exists, and if not, ask for the credentials.
-    static bool isAdminLoggedIn(const Poco::Net::HTTPRequest& request, Poco::Net::HTTPResponse& response);
     static bool isAdminLoggedIn(const Poco::Net::HTTPRequest& request, http::Response& response);
 
+    /// Authenticate the admin.
+    static bool authenticateAdmin(const Poco::Net::HTTPBasicCredentials& credentials,
+                                  http::Response& response, std::string& jwtToken);
+
     static void handleRequest(const Poco::Net::HTTPRequest& request,
-                              const RequestDetails &requestDetails,
+                              const RequestDetails& requestDetails,
                               Poco::MemoryInputStream& message,
-                              const std::shared_ptr<StreamSocket>& socket);
+                              const std::shared_ptr<StreamSocket>& socket,
+                              ResourceAccessDetails& accessDetails);
 
     static void readDirToHash(const std::string &basePath, const std::string &path, const std::string &prefix = std::string());
 
     static const std::string *getCompressedFile(const std::string &path);
 
     static const std::string *getUncompressedFile(const std::string &path);
+
+    /// If configured and necessary, sets the HSTS headers.
+    static void hstsHeaders([[maybe_unused]] http::Response& response)
+    {
+        // HSTS hardening. Disabled in debug builds.
+#if !ENABLE_DEBUG
+        if (COOLWSD::isSSLEnabled() || COOLWSD::isSSLTermination())
+        {
+            if (COOLWSD::getConfigValue<bool>("ssl.sts.enabled", false))
+            {
+                // Only for release, which doesn't support tests. No CONFIG_STATIC, therefore.
+                static const auto maxAge =
+                    COOLWSD::getConfigValue<int>("ssl.sts.max_age", 31536000); // Default 1 year.
+                response.add("Strict-Transport-Security",
+                             "max-age=" + std::to_string(maxAge) + "; includeSubDomains");
+            }
+        }
+#endif
+    }
 
 private:
     static std::map<std::string, std::pair<std::string, std::string>> FileHash;

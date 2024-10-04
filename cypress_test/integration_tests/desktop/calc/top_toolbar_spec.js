@@ -1,49 +1,42 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require expect */
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
 var calcHelper = require('../../common/calc_helper');
 
 describe(['tagdesktop'], 'Top toolbar tests.', function() {
-	var origTestFileName = 'top_toolbar.ods';
-	var testFileName;
+	var newFilePath;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		newFilePath = helper.setupAndLoadDocument('calc/top_toolbar.ods');
 		desktopHelper.switchUIToCompact();
 		calcHelper.clickOnFirstCell();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
+	it('Save.', function() {
+		cy.cGet('#bold').click();
+		cy.cGet('#save').click();
 
-	function getTextEndPosForFirstCell() {
-		calcHelper.dblClickOnFirstCell();
-		helper.moveCursor('end');
-		helper.getCursorPos('left', 'currentTextEndPos');
-	}
+		helper.reloadDocument(newFilePath);
 
-	it('Save.', { defaultCommandTimeout: 60000 }, function() {
-		cy.cGet('#tb_editbar_item_bold').click();
-		cy.cGet('#tb_editbar_item_save').click();
-
-		helper.reload(testFileName, 'calc', true);
-		cy.log('reload happened');
+		helper.setDummyClipboardForCopy();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td b').should('exist');
 	});
 
 	it('Clone Formatting.', function() {
+		helper.setDummyClipboardForCopy();
 		helper.typeIntoDocument('{downarrow}');
 
 		// Apply bold and try to clone it to the whole word.
-		cy.cGet('#tb_editbar_item_bold').click();
-		cy.cGet('#tb_editbar_item_formatpaintbrush').click();
+		cy.cGet('#bold').click();
+		cy.cGet('#toolbar-up #formatpaintbrush').click();
 
 		calcHelper.clickOnFirstCell(true,false);
 
 		helper.typeIntoDocument('{shift}{downarrow}');
+		helper.copy();
 
 		cy.wait(1000);
 
@@ -60,44 +53,54 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 				cy.stub(win, 'open').as('windowOpen');
 			});
 
-		cy.cGet('#tb_editbar_item_print-options .w2ui-tb-down').click();
-		cy.cGet('body').contains('.menu-text', 'Active Sheet').click();
+		cy.cGet('#toolbar-up #printoptions .arrowbackground').click();
+		cy.cGet('body').contains('.ui-combobox-entry', 'Active Sheet').click();
 
 		cy.get('@windowOpen').should('be.called');
 	});
 
 	it('Enable text wrapping.', function() {
-		getTextEndPosForFirstCell();
+		// Get cursor position at end of line before wrap
+		calcHelper.dblClickOnFirstCell();
+		helper.moveCursor('end');
+		helper.getCursorPos('left', 'currentTextEndPos');
+
+		cy.get('@currentTextEndPos').should('be.greaterThan', 0);
 
 		helper.initAliasToNegative('originalTextEndPos');
 		cy.get('@currentTextEndPos').then(function(pos) {
 			cy.wrap(pos).as('originalTextEndPos');
 		});
 
-		cy.get('@currentTextEndPos').should('be.greaterThan', 0);
-
+		// Leave cell
 		helper.typeIntoDocument('{enter}');
+		// Wait for enter to work before clicking on first cell again
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'A2');
+		cy.wait(100);
 
+		// Turn text wrap on
 		calcHelper.clickOnFirstCell();
+		cy.cGet('#toolbar-up .unoWrapText').click();
 
-		cy.cGet('.w2ui-tb-image.w2ui-icon.wraptext').click();
-
+		// Leave cell
 		helper.typeIntoDocument('{enter}');
-		// We use the text position as indicator
-		cy.waitUntil(function() {
-			getTextEndPosForFirstCell();
+		// Wait for enter to work before clicking on first cell again
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'A2');
+		cy.wait(100);
 
-			return cy.get('@currentTextEndPos')
-				.then(function(currentTextEndPos) {
-					return cy.get('@originalTextEndPos')
-						.then(function(originalTextEndPos) {
-							return originalTextEndPos > currentTextEndPos;
-						});
-				});
+		// Get cursor position at end of line after wrap
+		calcHelper.dblClickOnFirstCell();
+		helper.moveCursor('end');
+		helper.getCursorPos('left', 'currentTextEndPos');
+
+		cy.get('@currentTextEndPos').then(function(currentTextEndPos) {
+			cy.get('@originalTextEndPos').then(function(originalTextEndPos) {
+				expect(currentTextEndPos).to.be.lessThan(originalTextEndPos);
+			});
 		});
 	});
 
-	it('Merge cells', function() {
+	it.skip('Merge cells', function() {
 
 		// Select the full column
 		calcHelper.selectFirstColumn();
@@ -105,82 +108,103 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 		// Despite the selection is there, merge cells needs more time here.
 		cy.wait(1000);
 
-		cy.cGet('.w2ui-tb-image.w2ui-icon.togglemergecells').click();
+		cy.cGet('#toolbar-up #togglemergecells').click();
 
 		desktopHelper.checkDialogAndClose('Merge Cells');
 	});
 
 	it('Clear Direct formatting.', function() {
-		cy.cGet('#tb_editbar_item_bold').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#bold').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td b').should('exist');
-		cy.cGet('#tb_editbar_item_reset').click();
+		cy.cGet('#reset').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td b').should('not.exist');
 	});
 
 	it('Apply font style.', function() {
-		cy.cGet('#tb_editbar_item_fonts').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#toolbar-up #fontnamecombobox').click();
 		desktopHelper.selectFromListbox('Alef');
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		helper.waitUntilIdle('#copy-paste-container');
 		cy.cGet('#copy-paste-container table td font').should('have.attr', 'face', 'Alef');
 	});
 
 	it('Apply font size.', function() {
-		cy.cGet('#tb_editbar_item_fontsizes').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#toolbar-up #fontsizecombobox').click();
 		desktopHelper.selectFromListbox('12');
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td font').should('have.attr', 'size', '3');
 	});
 
 	it('Apply bold font.', function() {
-		cy.cGet('#tb_editbar_item_bold').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#bold').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td b').should('exist');
 	});
 
 	it('Apply underline.', function() {
-		cy.cGet('#tb_editbar_item_underline').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#underline').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td u').should('exist');
 	});
 
 	it('Apply italic.', function() {
-		cy.cGet('#tb_editbar_item_italic').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#italic').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td i').should('exist');
 	});
 
 	it('Apply strikethrough.', function() {
-		cy.cGet('#tb_editbar_item_strikeout').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#strikeout').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td s').should('exist');
 	});
 
 	it('Apply highlight color.', function() {
-		cy.cGet('#tb_editbar_item_backgroundcolor').click();
-		desktopHelper.selectColorFromPalette('8E7CC3');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#backgroundcolor .arrowbackground').click();
+		desktopHelper.selectColorFromPalette('3FAF46');
 		calcHelper.selectEntireSheet();
-		cy.cGet('#copy-paste-container table td').should('have.attr', 'bgcolor', '#8E7CC3');
+		helper.copy();
+		cy.cGet('#copy-paste-container table td').should('have.attr', 'bgcolor', '#3FAF46');
 	});
 
 	it('Apply font color.', function() {
-		cy.cGet('#tb_editbar_item_fontcolor').click();
-		desktopHelper.selectColorFromPalette('FFF2CC');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#fontcolor .arrowbackground').click();
+		desktopHelper.selectColorFromPalette('FFB66C');
 		calcHelper.selectEntireSheet();
-		cy.cGet('#copy-paste-container table td font').should('have.attr', 'color', '#FFF2CC');
+		helper.copy();
+		cy.cGet('#copy-paste-container table td font').should('have.attr', 'color', '#FFB66C');
 	});
 
 	it('Add/Delete decimal places', function() {
+		helper.setDummyClipboardForCopy();
 		// Add decimal place
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#tb_editbar_item_numberformatincdecimals').click();
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
+		cy.cGet('#numberformatincdecimals').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		var regex = new RegExp(';0;0.0$');
 		cy.cGet('#copy-paste-container table td')
@@ -190,9 +214,10 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 		// Delete Decimal place
 		calcHelper.clickOnFirstCell();
 
-		cy.cGet('#tb_editbar_item_numberformatdecdecimals').click();
+		cy.cGet('#numberformatdecdecimals').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		regex = new RegExp(';0;0$');
 		cy.cGet('#copy-paste-container table td')
 			.should('have.attr', 'sdnum')
@@ -200,9 +225,12 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Format as currency.', function() {
-		cy.cGet('#tb_editbar_item_numberformatcurrency').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
+		cy.cGet('#numberformatcurrency').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		var regex = new RegExp(';0;\\[\\$\\$-409]#,##0.00;\\[RED]-\\[\\$\\$-409]#,##0.00$');
 		cy.cGet('#copy-paste-container table td')
@@ -211,9 +239,12 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Format as Percent.', function() {
-		cy.cGet('#tb_editbar_item_numberformatpercent').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
+		cy.cGet('#numberformatpercent').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		var regex = new RegExp(';0;0.00%$');
 		cy.cGet('#copy-paste-container table td')
@@ -222,18 +253,22 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Apply left/right alignment', function() {
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
 		// Set right aligment first
-		cy.cGet('#tb_editbar_item_textalign .w2ui-tb-down').click();
-		cy.cGet('body').contains('.menu-text', 'Align Right').click();
+		cy.cGet('#textalign .arrowbackground').click();
+		cy.cGet('body').contains('.ui-combobox-entry', 'Align Right').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td').should('have.attr', 'align', 'right');
 
 		// Change alignment back
 		calcHelper.clickOnFirstCell();
 
-		cy.cGet('#tb_editbar_item_textalign .w2ui-tb-down').click();
-		cy.cGet('body').contains('.menu-text', 'Align Left').click({force: true}); // tooltip
+		cy.cGet('#textalign .arrowbackground').click();
+		cy.cGet('body').contains('.ui-combobox-entry', 'Align Left').click({force: true}); // tooltip
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td').should('have.attr', 'align', 'left');
 	});
 

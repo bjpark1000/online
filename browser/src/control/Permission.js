@@ -68,7 +68,7 @@ L.Map.include({
 				button.on('click', function () {
 					that._requestFileCopy();
 				});
-			} else if (!this.options.canTryLock && (window.mode.isMobile() || window.mode.isTablet())) {
+			} else if ((!window.ThisIsAMobileApp && !this['wopi'].UserCanWrite) || (!this.options.canTryLock && (window.mode.isMobile() || window.mode.isTablet()))) {
 				$('#mobile-edit-button').hide();
 			}
 
@@ -192,7 +192,7 @@ L.Map.include({
 	},
 
 	_requestFileCopy: function() {
-		if (!this.canUserWrite()) {
+		if (app.isReadOnly()) {
 			window.postMobileMessage('REQUESTFILECOPY');
 		} else {
 			this._switchToEditMode();
@@ -202,21 +202,18 @@ L.Map.include({
 	_enterEditMode: function (perm) {
 		this._permission = perm;
 
-		this.dragging.disable(); // FIXME: before unification, this was only called when not on a touch device.
-		// It would be better to split dragging.disable into a touch version and a mouse version but this looks like it will require a major rework of its own...
-
 		if ((window.mode.isMobile() || window.mode.isTablet()) && this._textInput && this.getDocType() === 'text') {
 			this._textInput.setSwitchedToEditMode();
 		}
 
-		this.fire('updatepermission', {perm : perm});
+		app.events.fire('updatepermission', {perm : perm});
 
 		if (this._docLayer._docType === 'text') {
 			this.setZoom(10);
 		}
 
 		if (window.ThisIsTheiOSApp && window.mode.isTablet() && this._docLayer._docType === 'spreadsheet')
-			this.showCalcInputBar(0);
+			this.showCalcInputBar();
 
 		if (window.ThisIsTheAndroidApp)
 			window.postMobileMessage('EDITMODE on');
@@ -225,44 +222,18 @@ L.Map.include({
 	_enterReadOnlyMode: function (perm) {
 		this._permission = perm;
 
-		this.dragging.enable();
 		// disable all user interaction, will need to add keyboard too
 		if (this._docLayer) {
 			this._docLayer._onUpdateCursor();
 			this._docLayer._clearSelections();
 			this._docLayer._onUpdateTextSelection();
 		}
-		this.fire('updatepermission', {perm : perm});
+		app.events.fire('updatepermission', {perm : perm});
 		this.fire('closemobilewizard');
 		this.fire('closealldialogs');
 
 		if (window.ThisIsTheAndroidApp)
 			window.postMobileMessage('EDITMODE off');
-	},
-
-	enableSelection: function () {
-		if (this.isEditMode()) {
-			return;
-		}
-		this.dragging.disable();
-	},
-
-	disableSelection: function () {
-		if (this.isEditMode()) {
-			return;
-		}
-		this.dragging.enable();
-	},
-
-	// Can user make changes to the document or not
-	// i.e: user can not make changes(even can not add comments) is document is shared as read only
-	canUserWrite: function() {
-		return app.file.permission === 'edit';
-	},
-
-	// If user has write access he can always add comments
-	isPermissionEditForComments: function() {
-		return this.canUserWrite() || app.file.editComment;
 	},
 
 	// Is user currently in read only mode (i.e: initial mobile read only view mode, user may have write access)

@@ -40,7 +40,7 @@ sub check_whitespaces($)
             print STDERR "$filename:$lineno:$line\n";
         }
     }
-    open( FILES, "git-diff-index -p -M --cached $h |" ) ||  die "Cannot run git diff-index.";
+    open( FILES, "git diff-index -p -M --cached $h |" ) ||  die "Cannot run git diff-index.";
     while (<FILES>)
     {
         if (m|^diff --git a/(.*) b/\1$|)
@@ -129,6 +129,22 @@ sub check_author()
     }
 }
 
+sub check_prettier()
+{
+    my $red = "\033[0;31m";
+    my $reset = "\033[0m";
+
+    system("make prettier >/dev/null 2>&1") == 0
+        or die $red .
+                "\n===============================================\n" .
+                "  ERROR: Code formatting check failed\n" .
+                "===============================================\n" .
+                "Your code is not properly formatted.\n" .
+                "Please run 'make prettier-write' before committing.\n" .
+                "===============================================\n" .
+                $reset . "\n";
+}
+
 # Do the work :-)
 
 # Initial commit: diff against an empty tree object
@@ -169,7 +185,7 @@ EOM
 }
 
 # Block large files.
-open( FILES, "git diff --cached --name-only --diff-filter=A -z $against |" ) ||  die "Cannot run git diff-index.";
+open( FILES, "git diff --cached --name-only --diff-filter=A -z $against |" ) ||  die "Cannot run git diff.";
 while (<FILES>)
 {
     if (/\.ui$/) # .ui files can get large
@@ -195,6 +211,9 @@ check_whitespaces( $against);
 
 # catch missing author info
 check_author();
+
+# check prettier in code
+check_prettier();
 
 # all OK
 exit( 0 );

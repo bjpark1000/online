@@ -1,22 +1,16 @@
-/* global describe it cy beforeEach require afterEach expect*/
+/* global describe it cy beforeEach require expect*/
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var calcHelper = require('../../common/calc_helper');
 
 describe.skip(['tagmobile'], 'Calc focus tests', function() {
-	var origTestFileName = 'focus.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		helper.setupAndLoadDocument('calc/focus.ods');
 
 		// Wait until the Formula-Bar is loaded.
 		cy.cGet('.inputbar_container', {timeout : 10000});
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	it('Basic document focus.', function() {
@@ -87,7 +81,7 @@ describe.skip(['tagmobile'], 'Calc focus tests', function() {
 		// Type some text.
 		var text1 = 'Hello from Calc';
 		calcHelper.typeIntoFormulabar(text1);
-		cy.cGet('#tb_actionbar_item_acceptformula')
+		cy.cGet('#toolbar-up #acceptformula')
 			.click();
 		helper.assertNoKeyboardInput();
 
@@ -101,7 +95,7 @@ describe.skip(['tagmobile'], 'Calc focus tests', function() {
 		helper.expectTextForClipboard(text1);
 
 		// Accept changes.
-		cy.cGet('#tb_actionbar_item_acceptformula')
+		cy.cGet('#toolbar-up #acceptformula')
 			.click();
 		helper.assertNoKeyboardInput();
 
@@ -116,7 +110,7 @@ describe.skip(['tagmobile'], 'Calc focus tests', function() {
 		calcHelper.typeIntoFormulabar('{ctrl}a');
 		helper.expectTextForClipboard(text1 + text2);
 		// End editing.
-		cy.cGet('#tb_actionbar_item_acceptformula')
+		cy.cGet('#toolbar-up #acceptformula')
 			.click();
 		helper.assertNoKeyboardInput();
 	});

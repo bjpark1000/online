@@ -3,7 +3,7 @@
  * L.WOPI contains WOPI related logic
  */
 
-/* global w2ui _ app errorMessages */
+/* global _ app _UNO JSDialog errorMessages URLPopUpSection */
 L.Map.WOPI = L.Handler.extend({
 	// If the CheckFileInfo call fails on server side, we won't have any PostMessageOrigin.
 	// So use '*' because we still needs to send 'close' message to the parent frame which
@@ -32,6 +32,7 @@ L.Map.WOPI = L.Handler.extend({
 	SupportsRename: false,
 	UserCanRename: false,
 	UserCanWrite: false,
+	DisablePresentation: false,
 
 	_appLoadedConditions: {
 		docloaded: false,
@@ -40,6 +41,7 @@ L.Map.WOPI = L.Handler.extend({
 	},
 
 	_appLoaded: false,
+	_insertImageMenuSetupDone: false,
 
 	initialize: function(map) {
 		this._map = map;
@@ -50,7 +52,7 @@ L.Map.WOPI = L.Handler.extend({
 
 		// init messages
 		this._map.on('docloaded', this._postLoaded, this);
-		this._map.on('updatepermission', this._postLoaded, this);
+		app.events.on('updatepermission', this._postLoaded.bind(this));
 		// This indicates that 'viewinfo' message has already arrived
 		this._map.on('viewinfo', this._postLoaded, this);
 
@@ -87,7 +89,6 @@ L.Map.WOPI = L.Handler.extend({
 
 		// init messages
 		this._map.off('docloaded', this._postLoaded, this);
-		this._map.off('updatepermission', this._postLoaded, this);
 		this._map.off('viewinfo', this._postLoaded, this);
 
 		this._map.off('wopiprops', this._setWopiProps, this);
@@ -126,10 +127,11 @@ L.Map.WOPI = L.Handler.extend({
 		this.UserCanRename = !!wopiInfo['UserCanRename'];
 		this.EnableShare = !!wopiInfo['EnableShare'];
 		this.UserCanWrite = !!wopiInfo['UserCanWrite'];
-		if (this.UserCanWrite) // There are 2 places that set the file permissions, WOPI and URI. Don't change permission if URI doesn't allow.
-			app.file.permission = (app.file.permission === 'edit' ? 'edit': app.file.permission);
-		else
-			app.file.permission = 'readonly';
+		this.DisablePresentation = wopiInfo['DisablePresentation'];
+
+		if (this.UserCanWrite && !app.isReadOnly()) // There are 2 places that set the file permissions, WOPI and URI. Don't change permission if URI doesn't allow.
+			app.setPermission('edit');
+
 		this.IsOwner = !!wopiInfo['IsOwner'];
 
 		if (wopiInfo['HideUserList'])
@@ -149,6 +151,26 @@ L.Map.WOPI = L.Handler.extend({
 			this._map.showBusy(_('Creating new file from template...'), false);
 			this._map.saveAs(wopiInfo['TemplateSaveAs']);
 		}
+
+		this.setupImageInsertionMenu();
+	},
+
+	setupImageInsertionMenu: function() {
+		if (this._insertImageMenuSetupDone) {
+			return;
+		}
+
+		var menuEntries = JSDialog.MenuDefinitions.get('InsertImageMenu');
+
+		if (this.DisableInsertLocalImage) {
+			menuEntries = [];
+		}
+
+		if (this.EnableInsertRemoteImage) {
+			menuEntries.push({action: 'remotegraphic', text: _UNO('.uno:InsertGraphic', '', true)});
+		}
+
+		this._insertImageMenuSetupDone = true;
 	},
 
 	resetAppLoaded: function() {
@@ -299,11 +321,8 @@ L.Map.WOPI = L.Handler.extend({
 				window.app.console.error('Property "Values.id" not set');
 				return;
 			}
-			if (!w2ui['actionbar'].get(msg.Values.id)) {
-				window.app.console.error('Statusbar element with id "' + msg.Values.id + '" not found.');
-				return;
-			}
-			w2ui['actionbar'].remove(msg.Values.id);
+			// TODO: remove
+			window.app.map.statusBar.showItem(msg.Values.id, false);
 			return;
 		}
 		else if (msg.MessageId === 'Show_Menubar') {
@@ -489,6 +508,7 @@ L.Map.WOPI = L.Handler.extend({
 		}
 		else if (msg.MessageId === 'Action_Export') {
 			if (msg.Values) {
+				this._notifySave = msg.Values['Notify'];
 				var format = msg.Values.Format;
 				var fileName = this._map['wopi'].BaseFileName;
 				fileName = fileName.substr(0, fileName.lastIndexOf('.'));
@@ -533,10 +553,16 @@ L.Map.WOPI = L.Handler.extend({
 				if (msg.Values.image && msg.Values.image.indexOf('data:') === 0) {
 					var image = L.DomUtil.create('img', '', preview);
 					image.src = msg.Values.image;
+					image.onload = function() {
+						URLPopUpSection.resetPosition();
+					};
+				} else {
+					L.DomUtil.addClass(preview, 'no-preview');
 				}
 				if (msg.Values.title) {
 					var title = L.DomUtil.create('p', '', preview);
 					title.innerText = msg.Values.title;
+					URLPopUpSection.resetPosition();
 				}
 			}
 		}
@@ -561,10 +587,10 @@ L.Map.WOPI = L.Handler.extend({
 		}
 		else if (msg.MessageId === 'Get_Export_Formats') {
 			var exportFormatsResp = [];
-			for (var index in this._map._docLayer._exportFormats) {
+			for (var index in app.file.exportFormats) {
 				exportFormatsResp.push({
-					Label: this._map._docLayer._exportFormats[index].label,
-					Format: this._map._docLayer._exportFormats[index].format
+					Label: app.file.exportFormats[index].label,
+					Format: app.file.exportFormats[index].format
 				});
 			}
 

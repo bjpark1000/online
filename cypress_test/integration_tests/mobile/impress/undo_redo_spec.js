@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
@@ -6,10 +6,9 @@ var impressHelper = require('../../common/impress_helper');
 var repairHelper = require('../../common/repair_document_helper');
 
 describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', function() {
-	var testFileName = 'undo_redo.odp';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'impress');
+		helper.setupAndLoadDocument('impress/undo_redo.odp');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
@@ -23,18 +22,13 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', f
 		helper.typeIntoDocument('Hello World');
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
-
 	function undo() {
 		cy.cGet('path.leaflet-interactive').dblclick();
 
 		//if we don't wait tests in CLI is failing
 		cy.wait(3000);
 
-		cy.cGet('#tb_actionbar_item_undo').click();
+		cy.cGet('#toolbar-up #undo').click();
 
 		helper.selectAllText();
 
@@ -51,7 +45,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', f
 	it('Redo',function() {
 		undo();
 
-		cy.cGet('#tb_actionbar_item_redo').click();
+		cy.cGet('#toolbar-up #redo').click();
 
 		helper.selectAllText();
 

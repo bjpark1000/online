@@ -14,10 +14,12 @@
 	--cell-cursor-selection-border-color: var(--color-primary);
 
 	--btn-size: 24px;
+	--btn-size-m: 18px;
 	--btn-size-s: 16px;
 	--border-radius: 4px; /* buttons, widgets */
 	--border-radius-large: 10px; /* dialog */
 
+	--tooltip-font-size: 14px;
 	--default-font-size: 12px;
 	--header-font-size: 16px;
 	/* tab min font-size */
@@ -36,7 +38,44 @@
 
 	/* Annotations */
 	--annotation-input-size: 100px;
+	--annotation-max-size: 1000;
+	--annotation-min-size: 100;
+
+	/* Ruler */
+	--ruler-height: 20px;
 }
+
+html {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	overflow: hidden;
+	overscroll-behavior-y: none; /* disable the pull to reload gesture */
+	background: var(--color-main-background);
+	touch-action: none;
+	line-height: normal;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	user-select: none;
+}
+
+#insertgraphic {
+	position: fixed;
+	top: -100em;
+}
+
+#selectbackground {
+	position: fixed;
+	top: -100em;
+}
+
+.about-dialog-info-div {
+	margin-inline-end: auto;
+}
+
 .focus-hidden:focus {
 	outline: none;
 }
@@ -129,12 +168,6 @@
 	flex: 1;
 	display: block;
 	height: 100%;
-}
-
-.auto-color-button {
-	width: calc(100% - 10px) !important;
-	padding: 0;
-	margin: 5px !important;
 }
 
 .color-palette-selector {
@@ -272,15 +305,6 @@
 	cursor: move;
 }
 
-body {
-	margin: 0;
-	overflow: hidden;
-	overscroll-behavior-y: none; /* disable the pull to reload gesture */
-	background: var(--color-main-background);
-	touch-action: none;
-	line-height: normal;
-}
-
 #presentation-controls-wrapper {
 	background: var(--color-main-background);
 	position: relative;
@@ -327,8 +351,10 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	width: 100%;
 	border-top: none;
 	z-index: 11 !important;
-	border-bottom: 1px solid var(--color-border);
+	border-bottom: 1px solid var(--color-toolbar-border);
 	background-color: var(--color-background-lighter);
+	display: flex;
+	flex-direction: column;
 }
 #toolbar-wrapper:not(.mobile) {
 	padding: 3px 0;
@@ -364,6 +390,7 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	z-index: 1001;
 	transform: scale(1);
 	transition: transform 0.5s;
+	display: none;
 }
 
 #mobile-edit-button.impress.portrait{
@@ -396,6 +423,9 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 }
 
 #search-input {
+	font-size: var(--default-font-size);
+	box-sizing: border-box;
+	min-width: 100px;
 	width: 200px;
 	height: 22px;
 	background: var(--color-background-lighter);
@@ -473,9 +503,8 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 .context-menu-hover > span > a {
 	color: var(--color-text-darker);
 }
-
-.context-menu-submenu.context-menu-hover:after {
-	border-color: transparent transparent transparent var(--color-background-lighter);
+.context-menu-submenu:after {
+	border-color: transparent transparent transparent var(--color-text-darker) !important;
 }
 
 /* With RTL write direction the arrow of the context menu's submenu should be flipped */
@@ -483,12 +512,13 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 [dir='rtl'] .context-menu-submenu:after {
 	right: unset;
 	left: .5em;
-	border-color: transparent #2f2f2f transparent transparent;
+	border-color: transparent var(--color-text-darker) transparent transparent;
 	border-width: .25em .25em .25em 0;
 }
 
-[dir='rtl'] .context-menu-submenu.context-menu-hover:after {
-	border-color: transparent var(--color-background-lighter) transparent transparent;
+
+#mobile-wizard {
+	display: none;
 }
 
 .mobile-wizard-content .cool-annotation {
@@ -503,33 +533,23 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	-webkit-user-select: text;
 	-ms-user-select: text;
 	z-index: 10;
-	max-width: 250px;
+	width: 250px;
 }
 
-.cool-annotation.greyed {
+.cool-annotation.annotation-pop-up {
+	width: 75%;
+}
+
+.cool-annotation.tracked-deleted-comment-show {
 	opacity: 0.5;
+}
+
+.cool-annotation.tracked-deleted-comment-hide {
+	display: none;
 }
 
 .cool-annotation > .modalpopup {
 	max-height: initial !important;
-}
-
-.cool-annotation:not(annotation-active) .cool-annotation-collapsed{
-	position: absolute;
-	left: 24px;
-}
-.cool-annotation.annotation-active:not(.rtl) .cool-annotation-collapsed{
-	position: absolute;
-	left: 0 !important;
-}
-.cool-annotation.annotation-active.rtl .cool-annotation-collapsed{
-	position: absolute;
-	left: 48px !important;
-}
-
-#document-container > .cool-annotation:hover .cool-annotation-collapsed{
-	box-shadow: 0 0 3px 0 rgb(0 0 0 / 50%), 0 0 10px 4px rgb(0 0 0 / 10%);
-	cursor: pointer;
 }
 
 .cool-annotation-content-wrapper, .cool-annotation-redline-content-wrapper {
@@ -547,13 +567,11 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 
 .cool-annotation:not(.annotation-active) .cool-annotation-content-wrapper:hover,
 .cool-annotation:not(.annotation-active) .cool-annotation-redline-content-wrapper:hover {
-	background-color: var(--color-background-dark);
 	color: var(--color-text-dark);
 }
 
 .annotation-active.modify-annotation-container .cool-annotation-content-wrapper,
-.annotation-active.reply-annotation-container .cool-annotation-content-wrapper,
-.cool-annotation-collapsed.modalpopup {
+.annotation-active.reply-annotation-container .cool-annotation-content-wrapper {
 	width: auto;
 }
 
@@ -564,7 +582,7 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	overflow: auto;
 }
 
-.cool-annotation-reply-count-collapsed {
+.cool-annotation-info-collapsed {
 	text-align: center;
 	margin: 0;
 	padding: 0;
@@ -583,60 +601,23 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	top: -15px;
 }
 
+.tracked-deleted-comment-show .cool-annotation-menubar {
+	display: none;
+}
+
 #main-document-content {
 	z-index: 0;
+	display: flex;
+	flex-direction: row;
+	flex: 1;
+	margin: 0;
+	padding: 0;
+	min-height: 0;
 }
 
-.cool-annotation-collapsed {
-	background: var(--color-background-lighter);
-	border-radius: 50%;
-	width: 36px;
-	height: 36px;
-	box-shadow: 0 0 3px 5px var(--color-background-lighter), 0 0 1px 5px var(--color-box-shadow);
+.cool-annotation-collapsed-show .cool-annotation-img {
+	visibility: visible;
 }
-
-.annotation-active .cool-annotation-collapsed {
-	box-shadow: 0 0 3px 5px var(--color-background-lighter), 0 0 1px 5px var(--color-box-shadow);
-}
-
-.jsdialog-container.cool-annotation-collapsed.modalpopup {
-	border-radius: 8px !important;
-	border: 1px solid var(--color-border) !important;
-	background: var(--color-background-lighter) !important;
-}
-
-#mobile-wizard-popup {
-	background-color: var(--color-background-lighter) !important;
-}
-
-.jsdialog-container.cool-annotation-collapsed.modalpopup .lokdialog.ui-dialog-content {
-	background-color: transparent !important;
-}
-
-.jsdialog-container.cool-annotation-collapsed.modalpopup .cool-annotation {
-	margin-bottom: 16px;
-}
-
-.jsdialog-container.cool-annotation-collapsed.modalpopup .cool-annotation:last-of-type {
-	margin-bottom: 8px;
-}
-
-.jsdialog-container.cool-annotation-collapsed.modalpopup .cool-annotation:first-of-type {
-	margin-top: 8px;
-}
-
-.jsdialog-container.cool-annotation-collapsed.modalpopup .cool-annotation-content-wrapper {
-	box-shadow: none;
-	border-width: 0px 0px 1px !important;
-	border-bottom: 1px solid var(--color-border) !important;
-	border-radius: 0 !important;
-	background: var(--color-background-lighter);
-}
-
-.jsdialog-container.cool-annotation-collapsed.modalpopup [id^='comment-container-']:last-child > .cool-annotation-content-wrapper{
-	border-width: 0 !important;
-}
-
 
 .cool-dont-break {
 	/* These are technically the same, but use both */
@@ -787,6 +768,12 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	padding: 0;
 	vertical-align: top;
 }
+
+.cool-annotation-child-line {
+	border-style: none none dashed dashed;
+	border-width: thin;
+	border-color: black;
+}
 /*Tooltips
 ----------------------------------*/
 [data-title]:hover:after {
@@ -796,12 +783,6 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	opacity: 1;
 	transition: all 0.1s ease 0.5s;
 	visibility: visible;
-}
-.cool-annotation-collapsed [data-title]:hover:after {
-	position: static;
-	float: right;
-	margin-top: 22px;
-	margin-right: 8px;
 }
 [data-title]:after {
 	content: attr(data-title);
@@ -817,6 +798,12 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 .cool-ruler-right[data-title]:after {
 	bottom: -2.8em;
 	left: auto;
+}
+#vertical-ruler .cool-ruler-left[data-title]:after,
+#vertical-ruler .cool-ruler-right[data-title]:after {
+	bottom: 3em;
+	left: auto;
+	transform: rotate(-90deg);
 }
 [data-title] {
 	position: relative;
@@ -889,6 +876,7 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 
 .ui-dialog-title {
 	min-height: 1em;
+	font-size: var(--header-font-size);
 }
 
 .lokdialog_container.ui-dialog.ui-widget-content {
@@ -911,6 +899,10 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	border-top-right-radius: 0px;
 	border-bottom-left-radius: var(--border-radius);
 	border-bottom-right-radius: var(--border-radius);
+}
+
+#formulaautocompletePopup .lokdialog {
+	padding: 0px;
 }
 
 .lokdialog.ui-dialog-content [Id$='Page'] {
@@ -995,19 +987,29 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	overflow: hidden;
 }
 
-#hyperlink-pop-up {
-	padding: 6px 0;
+.hyperlink-pop-up-container {
+	padding: 6px;
 	display: inline-block;
 	line-height: 1;
+	background-color: var(--color-background-lighter);
+	width: 301px;
+	overflow: visible !important;
+}
+
+.hyperlink-pop-up-container a {
+	display: inline-block;
+	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	max-width: 188px;
+	color: #0078A8;
+	vertical-align: middle;
 }
 
 .hyperlink-popup-btn {
 	display: inline-block;
 	margin-left: 12px;
-	vertical-align: baseline;
+	vertical-align: middle;
 	width: 26px;
 	height: 26px;
 }
@@ -1023,6 +1025,11 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	resize: none;
 	height: 32px;
 	box-sizing: border-box;
+}
+
+.functiontooltip {
+	white-space: nowrap;
+	max-width: fit-content !important;
 }
 
 .leaflet-canvas-container .cell-cursor-data {
@@ -1055,6 +1062,10 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	text-align: center;
 	justify-content: center;
 	flex-grow: 1;
+}
+
+#about-dialog {
+	display: none;
 }
 
 #about-dialog-container, #about-dialog-header {
@@ -1148,7 +1159,50 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 	min-width: 100px;
 }
 
-#hyperlink-pop-up-preview {
+.username-pop-up {
+	min-width: 110px;
+	padding-inline: 8px;
+	height: 45px;
+	position: absolute;
+	text-align: center;
+	z-index: 11;
+	font-family: var(--docs-font);
+	font-size: var(--default-font-size);
+	border-radius: var(--border-radius-large);
+	box-shadow: 0 0 2px 1px var(--color-box-shadow);
+}
+
+.username-pop-up p {
+	line-height: 45px;
+	padding: 0;
+	margin: auto;
+	color: white;
+}
+
+.username-pop-up .arrow-div {
+	width: 20px;
+	height: 20px;
+	transform: rotate(45deg);
+	display: inline-block;
+	position: relative;
+	top: calc(-10px - var(--border-radius));
+	border-radius: var(--border-radius);
+}
+
+.hyperlink-pop-up-container .arrow-div {
+	width: 20px;
+	height: 20px;
+	transform: rotate(45deg);
+	display: inline-block;
+	position: relative;
+	top: 27px;
+	left: calc(-50% + 10px);
+	background-color: inherit;
+	border-right: 1px solid var(--color-border-darker);
+	border-bottom: 1px solid var(--color-border-darker);
+}
+
+#hyperlink-pop-up-preview:not(.no-preview) {
 	text-align: center;
 }
 
@@ -1160,6 +1214,7 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 #hyperlink-pop-up-preview p {
 	text-overflow: ellipsis;
 	overflow: hidden;
+	font-size: 14px;
 }
 
 .prevent-select {
@@ -1171,4 +1226,28 @@ nav.spreadsheet-color-indicator ~ #sidebar-dock-wrapper {
 [contenteditable] { /* in old Safari, omitting this prevents editing */
 	-webkit-user-select: text;
 	user-select: text;
+}
+
+.progress-bar {
+	width: 100%;
+	height: 2px;
+	border: none;
+	background-color: var(--color-background-dark);
+	overflow: hidden;
+	position: relative;
+	display: none;
+	margin-block-end: -7px;
+	appearance: none;
+}
+
+.progress-bar::-webkit-progress-bar {
+	background-color: transparent;
+}
+
+.progress-bar::-webkit-progress-value {
+	background-color: var(--color-main-text);
+}
+
+.progress-bar::-moz-progress-bar {
+	background-color: var(--color-main-text);
 }

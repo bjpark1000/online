@@ -1,0 +1,14 @@
+etc/coolwsd/coolwsd.xml
+etc/coolwsd/coolkitconfig.xcu
+etc/nginx/snippets/coolwsd.conf
+etc/apache2/conf-available/coolwsd.conf
+usr/bin/coolconfig
+usr/bin/coolconvert
+usr/bin/coolforkit-ns
+usr/bin/coolstress
+usr/bin/coolwsd
+usr/bin/coolwsd-systemplate-setup
+usr/bin/loolconfig
+usr/bin/loolwsd
+usr/bin/loolwsd-systemplate-setup
+usr/share/

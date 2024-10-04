@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 /*
  * CPolygon implements polygon vector layer (closed polyline with a fill inside).
  * This is used to draw overlays like cell-selections (self or views) with multi-selection support.
@@ -40,7 +42,7 @@ class CPolygon extends CPolyline {
 		return new cool.Point(x / area, y / area);
 	}
 
-	updatePath(paintArea?: cool.Bounds, paneBounds?: cool.Bounds) {
+	updatePath(paintArea?: cool.Bounds, paneBounds?: cool.Bounds, freezePane?: { freezeX: boolean, freezeY: boolean }) {
 
 		this.parts = this.rings;
 
@@ -54,7 +56,7 @@ class CPolygon extends CPolyline {
 		}
 
 		this.simplifyPoints();
-		this.renderer.updatePoly(this, true /* closed? */, paintArea, paneBounds);
+		this.renderer.updatePoly(this, true /* closed? */, paintArea, paneBounds, freezePane);
 	}
 
 	anyRingBoundContains(corePxPoint: cool.Point): boolean {

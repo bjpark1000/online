@@ -1,21 +1,15 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Track Changes', function() {
-	var origTestFileName = 'track_changes.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		helper.setupAndLoadDocument('writer/track_changes.odt');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function confirmChange(action) {
@@ -59,6 +53,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Track Changes', function() 
 	});
 
 	it('Reject All',function() {
+		helper.setDummyClipboardForCopy();
 		helper.typeIntoDocument('Hello World');
 		cy.wait(1000);
 		enableRecord();
@@ -69,6 +64,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Track Changes', function() 
 		confirmChange('Reject All');
 		cy.cGet('.leaflet-layer').click();
 		helper.selectAllText();
+		helper.copy();
 		helper.expectTextForClipboard('Hello World');
 	});
 });

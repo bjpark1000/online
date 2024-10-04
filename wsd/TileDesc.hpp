@@ -23,7 +23,6 @@
 
 #define TILE_WIRE_ID
 using TileWireId = uint32_t;
-using TileBinaryHash = uint64_t;
 
 namespace TileParse
 {
@@ -110,8 +109,7 @@ public:
     void setVersion(const int ver) { _ver = ver; }
     int getImgSize() const { return _imgSize; }
     void setImgSize(const int imgSize) { _imgSize = imgSize; }
-    /// if non-zero: a preview.
-    int getId() const { return _id; }
+    bool isPreview() const { return _id >= 0; }
     void setId(TileWireId id) { _id = id; }
     void setOldWireId(TileWireId id) { _oldWireId = id; }
     void forceKeyframe() { setOldWireId(0); }
@@ -131,6 +129,21 @@ public:
                _id == other._id &&
                _normalizedViewId == other._normalizedViewId &&
                _mode == other._mode;
+    }
+
+    // used to cache a hash of the key elements compared in ==
+    uint32_t equalityHash() const
+    {
+        uint32_t a = _normalizedViewId << 17;
+        uint32_t b = _tilePosX << 7;
+
+        a ^= _part;
+        b ^= _tilePosY;
+        a ^= _mode << 30;
+        b ^= _tileWidth << 20;
+        a ^= _width << 19;
+
+        return a ^ b;
     }
 
     static bool rectanglesIntersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2)
@@ -219,9 +232,11 @@ public:
             << " tileposx=" << _tilePosX
             << " tileposy=" << _tilePosY
             << " tilewidth=" << _tileWidth
-            << " tileheight=" << _tileHeight
-            << " oldwid=" << _oldWireId
-            << " wid=" << _wireId;
+            << " tileheight=" << _tileHeight;
+        if (_oldWireId != 0)
+            oss << " oldwid=" << _oldWireId;
+        if (_wireId != 0)
+            oss << " wid=" << _wireId;
 
         // Anything after ver is optional.
         oss << " ver=" << _ver;
@@ -363,7 +378,7 @@ private:
 /// One or more tile header.
 /// Used to request the rendering of multiple
 /// tiles as well as the header of the response.
-class TileCombined final
+class TileCombined
 {
 private:
     TileCombined(int normalizedViewId, int part, int mode, int width, int height,
@@ -379,7 +394,10 @@ private:
         _height(height),
         _tileWidth(tileWidth),
         _tileHeight(tileHeight),
-        _isCompiled(true)
+        _hasWids(false),
+        _hasOldWids(false),
+        _isCombined(true),
+        _hasImgSizes(false)
     {
         if (_part < 0 ||
             _mode < 0 ||
@@ -388,7 +406,10 @@ private:
             _tileWidth <= 0 ||
             _tileHeight <= 0)
         {
-            throw BadArgumentException("Invalid tilecombine descriptor.");
+            throw BadArgumentException("Invalid tilecombine descriptor. Elements: " +
+                    std::to_string(_part) + " " + std::to_string(_mode) + " " +
+                    std::to_string(_width) + " " + std::to_string(_height) + " " +
+                    std::to_string(_tileWidth) + " " + std::to_string(_tileHeight));
         }
 
         StringVector positionXtokens(StringVector::tokenize(tilePositionsX, ','));
@@ -425,7 +446,9 @@ private:
             }
 
             int imgSize = 0;
-            if (!imgSizeTokens.empty() && !COOLProtocol::stringToInteger(imgSizeTokens[i], imgSize))
+            if (imgSizeTokens.empty() || COOLProtocol::stringToInteger(imgSizeTokens[i], imgSize))
+                _hasImgSizes = _hasImgSizes || (imgSize != 0);
+            else
             {
                 throw BadArgumentException("Invalid 'imgsize' in tilecombine descriptor.");
             }
@@ -437,21 +460,40 @@ private:
             }
 
             TileWireId oldWireId = 0;
-            if (!oldWireIdTokens.empty() && !COOLProtocol::stringToUInt32(oldWireIdTokens[i], oldWireId))
+            if (oldWireIdTokens.empty() || COOLProtocol::stringToUInt32(oldWireIdTokens[i], oldWireId))
+                _hasOldWids = _hasOldWids || (oldWireId != 0);
+            else
             {
-                throw BadArgumentException("Invalid tilecombine descriptor.");
+                throw BadArgumentException("Invalid tilecombine descriptor. oldWireIdToken: " + oldWireIdTokens[i]);
             }
 
             TileWireId wireId = 0;
-            if (!wireIdTokens.empty() && !COOLProtocol::stringToUInt32(wireIdTokens[i], wireId))
+            if (wireIdTokens.empty() || COOLProtocol::stringToUInt32(wireIdTokens[i], wireId))
+                _hasWids = _hasWids || (wireId != 0);
+            else
             {
-                throw BadArgumentException("Invalid tilecombine descriptor.");
+                throw BadArgumentException("Invalid tilecombine descriptor. wireIdToken: " + wireIdTokens[i]);
             }
 
             _tiles.emplace_back(_normalizedViewId, _part, _mode, _width, _height, x, y, _tileWidth, _tileHeight, ver, imgSize, -1);
             _tiles.back().setOldWireId(oldWireId);
             _tiles.back().setWireId(wireId);
         }
+    }
+protected:
+    TileCombined() :
+        _normalizedViewId(-1),
+        _part(-1),
+        _mode(-1),
+        _width(-1),
+        _height(-1),
+        _tileWidth(-1),
+        _tileHeight(-1),
+        _hasWids(false),
+        _hasOldWids(false),
+        _isCombined(false),
+        _hasImgSizes(false)
+    {
     }
 
 public:
@@ -462,14 +504,17 @@ public:
     int getHeight() const { return _height; }
     int getTileWidth() const { return _tileWidth; }
     int getTileHeight() const { return _tileHeight; }
-    bool getCombined() const { return _isCompiled; }
+    bool getCombined() const { return _isCombined; }
 
     const std::vector<TileDesc>& getTiles() const { return _tiles; }
+
+    // for DocumentBroker::handleTileCombinedRequest
     std::vector<TileDesc>& getTiles() { return _tiles; }
+    void setHasOldWireId() { _hasOldWids = true; }
 
     void setNormalizedViewId(int nViewId)
     {
-        for (auto& tile : getTiles())
+        for (auto& tile : _tiles)
             tile.setNormalizedViewId(nViewId);
 
         _normalizedViewId = nViewId;
@@ -502,68 +547,56 @@ public:
     /// Serialize this instance into a string.
     /// Optionally prepend a prefix.
     std::string serialize(const std::string& prefix = std::string(),
-                          const std::string& suffix = std::string()) const
-    {
-        return serialize(prefix, suffix, _tiles);
-    }
-
-    std::string serialize(const std::string& prefix, const std::string &suffix,
-                          const std::vector<TileDesc> &tiles) const
+                          const std::string &suffix = std::string()) const
     {
         std::ostringstream oss;
+        int num = 0;
         oss << prefix
             << " nviewid=" << _normalizedViewId
             << " part=" << _part
             << " width=" << _width
             << " height=" << _height
             << " tileposx=";
-        for (const auto& tile : tiles)
-        {
-            oss << tile.getTilePosX() << ',';
-        }
-        oss.seekp(-1, std::ios_base::cur); // Seek back over last comma, overwritten below.
+
+        num = 0;
+        for (const auto& tile : _tiles)
+            oss << (num++ ? "," : "") << tile.getTilePosX();
 
         oss << " tileposy=";
-        for (const auto& tile : tiles)
-        {
-            oss << tile.getTilePosY() << ',';
-        }
-        oss.seekp(-1, std::ios_base::cur); // Ditto.
+        num = 0;
+        for (const auto& tile : _tiles)
+            oss << (num++ ? "," : "") << tile.getTilePosY();
 
-        oss << " imgsize=";
-        for (const auto& tile : tiles)
+        if (_hasImgSizes)
         {
-            oss << tile.getImgSize() << ','; // Ditto.
+            oss << " imgsize=";
+            num = 0;
+            for (const auto& tile : _tiles)
+                oss << (num++ ? "," : "") << tile.getImgSize();
         }
-        oss.seekp(-1, std::ios_base::cur);
 
         oss << " tilewidth=" << _tileWidth
             << " tileheight=" << _tileHeight;
 
         oss << " ver=";
-        for (const auto& tile : tiles)
+        num = 0;
+        for (const auto& tile : _tiles)
+            oss << (num++ ? "," : "") << tile.getVersion();
+
+        if (_hasOldWids)
         {
-            oss << tile.getVersion() << ',';
+            oss << " oldwid=";
+            num = 0;
+            for (const auto& tile : _tiles)
+                oss << (num++ ? "," : "") << tile.getOldWireId();
         }
-        oss.seekp(-1, std::ios_base::cur); // Ditto.
 
-        oss << " oldwid=";
-        for (const auto& tile : tiles)
+        if (_hasWids)
         {
-            oss << tile.getOldWireId() << ',';
-        }
-        oss.seekp(-1, std::ios_base::cur); // Ditto
-
-        oss << " wid=";
-
-        bool comma = false;
-        for (const auto& tile : tiles)
-        {
-            if (comma)
-                oss << ',';
-
-            oss << tile.getWireId();
-            comma = true;
+            oss << " wid=";
+            num = 0;
+            for (const auto& tile : _tiles)
+                oss << (num++ ? "," : "") << tile.getWireId();
         }
 
         if (_mode)
@@ -630,27 +663,27 @@ public:
             {
                 if (name == "tileposx")
                 {
-                    tilePositionsX = value;
+                    tilePositionsX = std::move(value);
                 }
                 else if (name == "tileposy")
                 {
-                    tilePositionsY = value;
+                    tilePositionsY = std::move(value);
                 }
                 else if (name == "imgsize")
                 {
-                    imgSizes = value;
+                    imgSizes = std::move(value);
                 }
                 else if (name == "ver")
                 {
-                    versions = value;
+                    versions = std::move(value);
                 }
                 else if (name == "oldwid")
                 {
-                    oldwireIds = value;
+                    oldwireIds = std::move(value);
                 }
                 else if (name == "wid")
                 {
-                    wireIds = value;
+                    wireIds = std::move(value);
                 }
                 else
                 {
@@ -702,8 +735,7 @@ public:
                             vers.str(), "", oldhs.str(), hs.str());
     }
 
-    /// To support legacy / under-used renderTile
-    explicit TileCombined(const TileDesc &desc)
+    void initFrom(const TileDesc &desc)
     {
         _part = desc.getPart();
         _mode = desc.getEditMode();
@@ -713,10 +745,19 @@ public:
         _tileHeight = desc.getTileHeight();
         _normalizedViewId = desc.getNormalizedViewId();
         _tiles.push_back(desc);
-        _isCompiled = false;
+        _isCombined = false;
+        _hasWids = desc.getWireId() != 0;
+        _hasOldWids = desc.getOldWireId() != 0;
+        _hasImgSizes = desc.getImgSize() != 0;
     }
 
-private:
+    /// To support legacy / under-used renderTile
+    explicit TileCombined(const TileDesc &desc)
+    {
+        initFrom(desc);
+    }
+
+protected:
     std::vector<TileDesc> _tiles;
     int _normalizedViewId;
     int _part;
@@ -725,7 +766,33 @@ private:
     int _height;
     int _tileWidth;
     int _tileHeight;
-    bool _isCompiled;
+    bool _hasWids : 1;
+    bool _hasOldWids : 1;
+    bool _isCombined : 1;
+    bool _hasImgSizes : 1;
+};
+
+class TileCombinedBuilder : public TileCombined
+{
+public:
+    TileCombinedBuilder() : TileCombined() { }
+
+    void pushRendered(const TileDesc &desc, TileWireId wireId, size_t imgSize)
+    {
+        // uninitialized
+        if (_part < 0 && _mode < 0 && _width <= 0)
+            initFrom(desc);
+        else
+            _tiles.push_back(desc);
+
+        _tiles.back().setWireId(wireId);
+        _hasWids = true;
+
+        _tiles.back().setImgSize(imgSize);
+        _hasImgSizes = true;
+
+        _isCombined = _tiles.size() > 1;
+    }
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

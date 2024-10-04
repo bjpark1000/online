@@ -1,23 +1,17 @@
-/* global describe it cy beforeEach require afterEach*/
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var impressHelper = require('../../common/impress_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply paragraph properties on selected shape.', function() {
-	var origTestFileName = 'apply_paragraph_props_shape.odp';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'impress');
+		helper.setupAndLoadDocument('impress/apply_paragraph_props_shape.odp');
 
 		mobileHelper.enableEditingMobile();
 
 		impressHelper.selectTextShapeInTheCenter();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function triggerNewSVG() {
@@ -33,7 +27,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply paragraph properties 
 	function openParagraphPropertiesPanel() {
 		mobileHelper.openMobileWizard();
 
-		helper.clickOnIdle('#ParaPropertyPanel');
+		cy.cGet('#ParaPropertyPanel').click();
 
 		cy.cGet('.unoParaLeftToRight').should('be.visible');
 	}
@@ -41,146 +35,146 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply paragraph properties 
 	function openListsPropertiesPanel() {
 		mobileHelper.openMobileWizard();
 
-		helper.clickOnIdle('#ListsPropertyPanel');
+		cy.cGet('#ListsPropertyPanel').click();
 
 		cy.cGet('.unoDefaultBullet').should('be.visible');
 	}
 
 	it.skip('Apply left/right alignment on text shape.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 
 		// Set right alignment first
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoRightPara');
+		cy.cGet('.unoRightPara').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '23586');
 
 		// Set left alignment
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoLeftPara');
+		cy.cGet('.unoLeftPara').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 	});
 
 	it.skip('Apply center alignment on text shape.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoCenterPara');
+		cy.cGet('.unoCenterPara').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '12493');
 	});
 
 	it.skip('Apply justified alignment on text shape.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 
 		// Set right alignment first
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoRightPara');
+		cy.cGet('.unoRightPara').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '23586');
 
 		// Then set justified alignment
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoJustifyPara');
+		cy.cGet('.unoJustifyPara').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 	});
 
 	it.skip('Set top/bottom alignment on text shape.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '4834');
 
 		// Set bottom alignment first
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoCellVertBottom');
+		cy.cGet('.unoCellVertBottom').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '10811');
 
 		// Then set top alignment
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoCellVertTop');
+		cy.cGet('.unoCellVertTop').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '4834');
 	});
 
 	it.skip('Apply center vertical alignment on text shape.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '4834');
 
 		openParagraphPropertiesPanel();
 
-		helper.clickOnIdle('.unoCellVertCenter');
+		cy.cGet('.unoCellVertCenter').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '7822');
 	});
 
 	it('Apply default bulleting on text shape.', function() {
 		// We have no bulleting by default
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .BulletChars')
+		cy.cGet('#document-container g.Page .BulletChars')
 			.should('not.exist');
 
 		openListsPropertiesPanel();
 
-		helper.clickOnIdle('#ListsPropertyPanel .unoDefaultBullet');
+		cy.cGet('#ListsPropertyPanel .unoDefaultBullet').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .BulletChars')
+		cy.cGet('#document-container g.Page .BulletChars')
 			.should('exist');
 	});
 
 	it('Apply default numbering on text shape.', function() {
 		// We have no bulleting by default
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .SVGTextShape tspan')
+		cy.cGet('#document-container g.Page .SVGTextShape tspan')
 			.should('not.have.attr', 'ooo:numbering-type');
 
 		openListsPropertiesPanel();
 
-		helper.clickOnIdle('#ListsPropertyPanel .unoDefaultNumbering');
+		cy.cGet('#ListsPropertyPanel .unoDefaultNumbering').click();
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .SVGTextShape tspan')
+		cy.cGet('#document-container g.Page .SVGTextShape tspan')
 			.should('have.attr', 'ooo:numbering-type', 'number-style');
 	});
 
 	it.skip('Apply spacing above on text shape.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph:nth-of-type(2) tspan')
+		cy.cGet('#document-container g.Page .TextParagraph:nth-of-type(2) tspan')
 			.should('have.attr', 'y', '6600');
 
 		openParagraphPropertiesPanel();
@@ -189,12 +183,12 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply paragraph properties 
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph:nth-of-type(2) tspan')
+		cy.cGet('#document-container g.Page .TextParagraph:nth-of-type(2) tspan')
 			.should('have.attr', 'y', '11180');
 	});
 
 	it.skip('Apply spacing below on text shape.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph:nth-of-type(2) tspan')
+		cy.cGet('#document-container g.Page .TextParagraph:nth-of-type(2) tspan')
 			.should('have.attr', 'y', '6600');
 
 		openParagraphPropertiesPanel();
@@ -203,7 +197,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply paragraph properties 
 
 		triggerNewSVG();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph:nth-of-type(2) tspan')
+		cy.cGet('#document-container g.Page .TextParagraph:nth-of-type(2) tspan')
 			.should('have.attr', 'y', '11180');
 	});
 });

@@ -31,7 +31,7 @@ fi;
 echo "Using Docker Hub Repository: '$DOCKER_HUB_REPO' with tag '$DOCKER_HUB_TAG'."
 
 if [ -z "$CORE_BRANCH" ]; then
-  CORE_BRANCH="distro/collabora/co-22.05"
+  CORE_BRANCH="distro/collabora/co-24.04"
 fi;
 echo "Building core branch '$CORE_BRANCH'"
 
@@ -76,9 +76,9 @@ mkdir -p "$INSTDIR"
 ##### build static poco #####
 
 if test ! -f poco/lib/libPocoFoundation.a ; then
-    wget https://github.com/pocoproject/poco/archive/poco-1.11.1-release.tar.gz
-    tar -xzf poco-1.11.1-release.tar.gz
-    cd poco-poco-1.11.1-release/
+    wget https://pocoproject.org/releases/poco-1.12.5p2/poco-1.12.5p2-all.tar.gz
+    tar -xzf poco-1.12.5p2-all.tar.gz
+    cd poco-1.12.5p2-all/
     ./configure --static --no-tests --no-samples --no-sharedlibs --cflags="-fPIC" --omit=Zip,Data,Data/SQLite,Data/ODBC,Data/MySQL,MongoDB,PDF,CppParser,PageCompiler,Redis,Encodings,ActiveRecord --prefix=$BUILDDIR/poco
     make -j $(nproc)
     make install
@@ -116,7 +116,7 @@ fi
 ##### LOKit (core) #####
 
 # build
-if [ "$CORE_BRANCH" == "distro/collabora/co-22.05" ]; then
+if [ "$CORE_BRANCH" == "distro/collabora/co-24.04" ]; then
   ( cd core && ./autogen.sh --with-distro=CPLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
 else
   ( cd core && ./autogen.sh --with-distro=LibreOfficeOnline ) || exit 1

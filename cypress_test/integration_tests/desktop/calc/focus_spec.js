@@ -1,21 +1,16 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 
 describe(['tagdesktop'], 'Calc focus tests', function() {
-	var origTestFileName = 'focus.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('calc/focus.ods');
 	});
 
 	it('Formula-bar focus', function() {
+		helper.setDummyClipboardForCopy();
 		// Select first cell
 		calcHelper.clickOnFirstCell();
 		cy.wait(200);
@@ -31,6 +26,7 @@ describe(['tagdesktop'], 'Calc focus tests', function() {
 
 		// Check text in formulabar
 		calcHelper.typeIntoFormulabar('{ctrl}a');
+		helper.copy();
 		helper.expectTextForClipboard(text1);
 		// Clear selection
 		calcHelper.typeIntoFormulabar('{enter}');
@@ -47,6 +43,7 @@ describe(['tagdesktop'], 'Calc focus tests', function() {
 		calcHelper.clickOnFirstCell();
 		cy.wait(200);
 		calcHelper.typeIntoFormulabar('{ctrl}a');
+		helper.copy();
 		helper.expectTextForClipboard(text1+text2);
 		calcHelper.typeIntoFormulabar('{enter}');
 	});

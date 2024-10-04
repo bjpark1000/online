@@ -1,17 +1,11 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Calc sidebar dialog image caching', function() {
-	var origTestFileName = 'many-sizes.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('calc/many-sizes.ods');
 	});
 
 	it('Sidebar image caching', function() {

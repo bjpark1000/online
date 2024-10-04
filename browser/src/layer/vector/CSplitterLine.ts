@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 /*
  * CSplitterLine is a CRectangle to be used to show the splits when there are freeze-panes.
  */
@@ -42,7 +44,39 @@ class CSplitterLine extends CRectangle {
 	onChange() {
 		var newBounds = this.computeBounds();
 		this.fillOpacity = this.inactive ? 0 : this.origOpacity;
+		this.fillGradient = this.computeShouldFillGradient();
 		this.setBounds(newBounds);
+	}
+
+	computeShouldFillGradient() {
+		const tsManager = this.map._docLayer._painter;
+		const splitPos = tsManager.getSplitPos();
+
+		if ((this.isHoriz && !splitPos.x) || (!this.isHoriz && !splitPos.y)
+		) {
+			return false;
+		}
+
+		if (tsManager._inZoomAnim) {
+			if (this.isHoriz) {
+				return !tsManager._zoomAtDocEdgeX;
+			} else {
+				return !tsManager._zoomAtDocEdgeY;
+			}
+		}
+
+		const pixelBounds = this.map.getPixelBounds();
+
+		if (this.isHoriz) {
+			return !!pixelBounds.min.x;
+		} else {
+			return !!pixelBounds.min.y;
+		}
+	}
+
+	updatePathAllPanes(paintArea?: Bounds) {
+		this.fillGradient = this.computeShouldFillGradient();
+		super.updatePathAllPanes(paintArea);
 	}
 
 	private computeBounds(): cool.Bounds {

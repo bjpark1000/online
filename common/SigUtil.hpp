@@ -86,10 +86,6 @@ namespace SigUtil
     /// Signal log number
     void signalLogNumber(std::size_t num, int base = 10);
 
-    /// Wait for the signal handler, if any,
-    /// and prevent _Exit while collecting backtrace.
-    void waitSigHandlerTrap();
-
     /// Returns the name of the signal.
     const char* signalName(int signo);
 
@@ -120,6 +116,14 @@ namespace SigUtil
     /// child pid is removed from the process table
     /// after a certain (short) timeout.
     bool killChild(const int pid, const int signal);
+
+    extern "C" { typedef void (*SigChildHandler)(uint32_t); }
+
+    /// Sets a child death signal handler
+    void setSigChildHandler(SigChildHandler fn);
+
+    /// Ensure that if a parent process is killed we go down too
+    void dieOnParentDeath();
 
     /// Dump a signal-safe back-trace
     void dumpBacktrace();

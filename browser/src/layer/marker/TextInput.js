@@ -113,7 +113,7 @@ L.TextInput = L.Layer.extend({
 			this._map.on('commandresult', this._onCommandResult, this);
 		}
 
-		this._map.on('updatepermission', this._onPermission, this);
+		app.events.on('updatepermission', this._onPermission.bind(this));
 		L.DomEvent.on(this._textArea, 'focus blur', this._onFocusBlur, this);
 
 		// Do not wait for a 'focus' event to attach events if the
@@ -152,7 +152,6 @@ L.TextInput = L.Layer.extend({
 		if (!this.hasAccessibilitySupport()) {
 			this._map.off('commandresult', this._onCommandResult, this);
 		}
-		this._map.off('updatepermission', this._onPermission, this);
 		L.DomEvent.off(this._textArea, 'focus blur', this._onFocusBlur, this);
 		L.DomEvent.off(this._map.getContainer(), 'mousedown touchstart', this._abortComposition, this);
 
@@ -168,7 +167,7 @@ L.TextInput = L.Layer.extend({
 	},
 
 	_onPermission: function(e) {
-		if (e.perm === 'edit') {
+		if (e.detail.perm === 'edit') {
 			this._textArea.removeAttribute('disabled');
 		} else {
 			this._textArea.setAttribute('disabled', true);
@@ -485,13 +484,13 @@ L.TextInput = L.Layer.extend({
 	// Displays the caret and the under-caret marker.
 	// Fetches the coordinates of the caret from the map's doclayer.
 	showCursor: function() {
-		if (!this._map._docLayer._cursorMarker) {
+		if (!this._map._docLayer._cursorMarker || !this._map._docLayer._tileWidthTwips) {
 			return;
 		}
 
 		// Fetch top and bottom coords of caret
-		var top = this._map._docLayer._visibleCursor.getNorthWest();
-		var bottom = this._map._docLayer._visibleCursor.getSouthWest();
+		var top = this._map._docLayer._twipsToLatLng({ x: app.file.textCursor.rectangle.x1, y: app.file.textCursor.rectangle.y1 });
+		var bottom = this._map._docLayer._twipsToLatLng({ x: app.file.textCursor.rectangle.x1, y: app.file.textCursor.rectangle.y2 });
 
 		if (!this._map._docLayer._cursorMarker.isDomAttached()) {
 			// Display caret
@@ -832,7 +831,7 @@ L.TextInput = L.Layer.extend({
 		if (this._hasFormulaBarFocus() && content.length) {
 			var contentString = this.codePointsToString(content);
 			if (contentString[matchTo] === '\n' || contentString.charCodeAt(matchTo) === 13) {
-				this._map.dispatch('acceptformula');
+				app.dispatcher.dispatch('acceptformula');
 			}
 		}
 	},
@@ -955,6 +954,33 @@ L.TextInput = L.Layer.extend({
 		}
 	},
 
+	_handleKeyDownForPopup: function (ev, id) {
+		var popup = L.DomUtil.get(id);
+		if (popup) {
+			if (ev.key === 'ArrowDown') {
+				var initialFocusElement = document.querySelector('#' + id + ' span');
+				if (initialFocusElement) {
+					initialFocusElement.tabIndex = 0;
+					initialFocusElement.focus();
+					ev.preventDefault();
+					ev.stopPropagation();
+				}
+
+			} else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' ||
+				ev.key === 'ArrowUp' || ev.key === 'Home' ||
+				ev.key === 'End' || ev.key === 'PageUp' ||
+				ev.key === 'PageDown' || ev.key === 'Enter' ||
+				ev.key === 'Escape' || ev.key === 'Control' ||
+				ev.key === 'Tab') {
+
+				if (id === 'mentionPopup')
+					this._map.fire('closementionpopup', { 'typingMention': false });
+				else if (id === 'formulaautocompletePopup')
+					this._map.fire('closepopup');
+			}
+		}
+	},
+
 	_onKeyDown: function(ev) {
 		if (this._map.uiManager.isUIBlocked())
 			return;
@@ -972,12 +998,12 @@ L.TextInput = L.Layer.extend({
 		this._newlineHint = ev.keyCode === 13;
 		this._linebreakHint = this._newlineHint && ev.shiftKey;
 
-		// In Firefox 117 and greater no copy/cut input event is emitted when CTRL+C/X is pressed
+		// In Firefox 117 up to 120 no copy/cut input event is emitted when CTRL+C/X is pressed
 		// with no selection in a text element with contenteditable='true'. Since no copy/cut event
 		// is emitted, Clipboard.copy/cut is never invoked. So we need to emit it manually.
 		// To be honest it seems a Firefox bug. We need to check if they fix it in later version.
 		if (!this.hasAccessibilitySupport() && !L.Browser.win &&
-			L.Browser.gecko && L.Browser.geckoVersion >= '117.0' &&
+			L.Browser.gecko && L.Browser.geckoVersion >= '117.0' && L.Browser.geckoVersion <= '120.0' &&
 			ev.ctrlKey && window.getSelection().isCollapsed) {
 			if (ev.key === 'c') {
 				document.execCommand('copy');
@@ -990,7 +1016,7 @@ L.TextInput = L.Layer.extend({
 		if (this.hasAccessibilitySupport()) {
 			if ((this._hasAnySelection && !this._isEditingInSelection && this._map.getDocType() !== 'spreadsheet') ||
 				(!this._hasAnySelection && this._map.getDocType() === 'presentation')) {
-				if (!L.browser.cypressTest) {
+				if (!L.Browser.cypressTest) {
 					var allowedKeyEvent =
 						this._map.keyboard.allowedKeyCodeWhenNotEditing[ev.keyCode] ||
 						ev.ctrlKey ||
@@ -1101,25 +1127,8 @@ L.TextInput = L.Layer.extend({
 			}
 		}
 
-		var mentionPopup = L.DomUtil.get('mentionPopup');
-		if (mentionPopup) {
-			if (ev.key === 'ArrowDown') {
-				var initialFocusElement = document.querySelector('#mentionPopup span');
-				if (initialFocusElement) {
-					initialFocusElement.tabIndex = 0;
-					initialFocusElement.focus();
-					ev.preventDefault();
-					ev.stopPropagation();
-				}
-			} else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' ||
-				ev.key === 'ArrowUp' || ev.key === 'Home' ||
-				ev.key === 'End' || ev.key === 'PageUp' ||
-				ev.key === 'PageDown' || ev.key === 'Enter' ||
-				ev.key === 'Escape' || ev.key === 'Control' ||
-				ev.key === 'Tab') {
-				this._map.fire('closementionpopup', { 'typingMention': false });
-			}
-		}
+		this._handleKeyDownForPopup(ev, 'mentionPopup');
+		this._handleKeyDownForPopup(ev, 'formulaautocompletePopup');
 	},
 
 	// Check arrow keys on 'keyup' event; using 'ArrowLeft' or 'ArrowRight'
@@ -1171,6 +1180,8 @@ L.TextInput = L.Layer.extend({
 			window.app.console.log('Remove ' + before + ' before, and ' + after + ' after');
 		}
 
+		this._map.userList.unfollowAll();
+
 		/// TODO: rename the event to 'removetextcontent' as soon as coolwsd supports it
 		/// TODO: Ask Marco about it
 		app.socket.sendMessage(
@@ -1200,6 +1211,7 @@ L.TextInput = L.Layer.extend({
 		{
 			var encodedText = encodeURIComponent(text);
 			var winId = this._map.getWinId();
+			this._map.userList.unfollowAll();
 			app.socket.sendMessage(
 				'textinput id=' + winId + ' text=' + encodedText);
 		}
@@ -1208,6 +1220,7 @@ L.TextInput = L.Layer.extend({
 	// Tiny helper - encapsulates sending a 'key' or 'windowkey' websocket message
 	// "type" can be "input" (default) or "up"
 	_sendKeyEvent: function(charCode, unoKeyCode, type) {
+		this._map.userList.unfollowAll();
 		if (!type) {
 			type = 'input';
 		}
@@ -1286,14 +1299,13 @@ L.TextInput = L.Layer.extend({
 				// We need to make the paragraph at the cursor position focused in core
 				// so its content is sent to the editable area.
 				this._justSwitchedToEditMode = false;
-				if (this._map._docLayer && this._map._docLayer._visibleCursor) {
+				if (this._map._docLayer && app.file.textCursor.visible) {
 					window.app.console.log('A11yTextInput._setAcceptInput: going to emit a synthetic click after switching to edit mode.');
-					var top = this._map._docLayer._visibleCursor.getNorthWest();
-					var bottom = this._map._docLayer._visibleCursor.getSouthWest();
-					var center = L.latLng((top.lat + bottom.lat) / 2, top.lng);
-					var cursorPos = this._map._docLayer._latLngToTwips(center);
-					this._map._docLayer._postMouseEvent('buttondown', cursorPos.x, cursorPos.y, 1, 1, 0);
-					this._map._docLayer._postMouseEvent('buttonup', cursorPos.x, cursorPos.y, 1, 1, 0);
+					let center = app.file.textCursor.rectangle.center;
+					center[0] = Math.round(center[0]);
+					center[1] = Math.round(center[1]);
+					this._map._docLayer._postMouseEvent('buttondown', center[0], center[1], 1, 1, 0);
+					this._map._docLayer._postMouseEvent('buttonup', center[0], center[1], 1, 1, 0);
 				}
 			}
 		}

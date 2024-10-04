@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 /*
  * CPolyline implements polyline vector layer (a set of points connected with lines).
  * This class implements basic line drawing and CPointSet datastructure which is to be used
@@ -34,9 +36,6 @@ class CPolyline extends CPath {
 
 		this.pointSet = pointSet;
 		this.updateRingsBounds();
-		if (this.pointSet.empty()) {
-			this.closePopup({});
-		}
 
 		if (this.renderer)
 			this.renderer.setPenOnOverlay();
@@ -145,11 +144,11 @@ class CPolyline extends CPath {
 		return new cool.Bounds(this.bounds.getTopLeft().subtract(p), this.bounds.getBottomRight().add(p));
 	}
 
-	updatePath(paintArea?: cool.Bounds, paneBounds?: cool.Bounds) {
+	updatePath(paintArea?: cool.Bounds, paneBounds?: cool.Bounds, freezePane?: { freezeX: boolean, freezeY: boolean }) {
 		this.clipPoints(paintArea);
 		this.simplifyPoints();
 
-		this.renderer.updatePoly(this, false /* closed? */, paintArea, paneBounds);
+		this.renderer.updatePoly(this, false /* closed? */, paintArea, paneBounds, freezePane);
 	}
 
 	// clip polyline by renderer bounds so that we have less to render for performance

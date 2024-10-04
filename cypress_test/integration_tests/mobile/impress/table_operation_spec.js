@@ -1,21 +1,15 @@
-/* global describe it cy beforeEach expect require afterEach */
+/* global describe it cy beforeEach expect require */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var impressHelper = require('../../common/impress_helper');
 
 describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', function() {
-	var origTestFileName = 'table_operation.odp';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'impress');
+		helper.setupAndLoadDocument('impress/table_operation.odp');
 
 		mobileHelper.enableEditingMobile();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function retriggerNewSvgForTableInTheCenter() {
@@ -51,7 +45,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -61,10 +55,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 			});
 
 		//assert the text position
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '7290');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '6643');
 	});
 
@@ -79,7 +73,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -88,10 +82,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 				expect(cells).to.have.lengthOf(8);
 			});
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '7290');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '5644');
 	});
 
@@ -112,7 +106,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -121,10 +115,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 				expect(cells).to.have.lengthOf(6);
 			});
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '14339');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '5644');
 	});
 
@@ -143,7 +137,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -152,10 +146,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 				expect(cells).to.have.lengthOf(6);
 			});
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '7290');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '5644');
 	});
 
@@ -169,7 +163,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -178,7 +172,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 				expect(cells).to.have.lengthOf(4);
 			});
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('not.exist');
 	});
 
@@ -197,7 +191,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -206,10 +200,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 				expect(cells).to.have.lengthOf(6);
 			});
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '7290');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '5644');
 	});
 
@@ -227,7 +221,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -236,10 +230,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 				expect(cells).to.have.lengthOf(5);
 			});
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '7290');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '5644');
 	});
 
@@ -257,7 +251,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 
 		retriggerNewSvgForTableInTheCenter();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('have.class', 'com.sun.star.drawing.TableShape');
 
 		//assert the number of cells
@@ -266,10 +260,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 				expect(cells).to.have.lengthOf(4);
 			});
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '7290');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'y', '5644');
 	});
 
@@ -283,7 +277,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker')
 			.should('not.exist');
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page g')
+		cy.cGet('#document-container g.Page g')
 			.should('not.exist');
 	});
 	//TODO: add split cells tests

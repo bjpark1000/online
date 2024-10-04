@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require afterEach*/
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var searchHelper = require('../../common/search_helper');
@@ -6,21 +6,15 @@ var mobileHelper = require('../../common/mobile_helper');
 var writerHelper = require('../../common/writer_helper');
 
 describe.skip('Searching via search bar.', function() {
-	var origTestFileName = 'search_bar.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		helper.setupAndLoadDocument('writer/search_bar.odt');
 		mobileHelper.enableEditingMobile();
 		searchHelper.showSearchBar();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	it('Search existing word.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 		// Part of the text should be selected
 		helper.textSelectionShouldExist();
 		helper.expectTextForClipboard('a');
@@ -28,12 +22,12 @@ describe.skip('Searching via search bar.', function() {
 
 	it('Search not existing word.', function() {
 		writerHelper.selectAllTextOfDoc();
-		searchHelper.tpyeIntoSearchField('q');
+		searchHelper.typeIntoSearchField('q');
 		helper.textSelectionShouldNotExist();
 	});
 
 	it('Search next / prev instance.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 		helper.textSelectionShouldExist();
 		helper.expectTextForClipboard('a');
 		cy.cGet('#copy-paste-container p b').should('not.exist');
@@ -50,7 +44,7 @@ describe.skip('Searching via search bar.', function() {
 	});
 
 	it('Search at the document end.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 		helper.textSelectionShouldExist();
 		helper.expectTextForClipboard('a');
 		cy.cGet('#copy-paste-container p b').should('not.exist');
@@ -67,7 +61,7 @@ describe.skip('Searching via search bar.', function() {
 	});
 
 	it('Cancel search.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 		// Part of the text should be selected
 		helper.textSelectionShouldExist();
 		helper.expectTextForClipboard('a');
@@ -78,7 +72,7 @@ describe.skip('Searching via search bar.', function() {
 	});
 
 	it('Close search.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 		// Part of the text should be selected
 		helper.textSelectionShouldExist();
 		helper.expectTextForClipboard('a');

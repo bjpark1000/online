@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 /*
  * CDarkOverlay is used to render a dark overlay around an OLE object when selected
  */

@@ -1,29 +1,21 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 
 describe.skip('Repair Document', function() {
-	var origTestFileName = 'repair_doc.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc', undefined, true);
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('calc/repair_doc.ods',true);
 	});
 
 	function repairDoc(frameId1, frameId2) {
 		cy.cSetActiveFrame(frameId1);
 		helper.typeIntoDocument('Hello World{enter}');
 		cy.cSetActiveFrame(frameId2);
-		calcHelper.selectEntireSheet();
-		calcHelper.assertDataClipboardTable(['Hello World\n']);
+		calcHelper.assertSheetContents(['Hello World\n']);
 		cy.cSetActiveFrame(frameId1);
-		calcHelper.selectEntireSheet();
-		calcHelper.assertDataClipboardTable(['Hello World\n']);
+		calcHelper.assertSheetContents(['Hello World\n']);
 		cy.cSetActiveFrame(frameId2);
 		cy.cGet('#menu-editmenu').click().cGet('#menu-repair').click();
 		cy.cGet('#DocumentRepairDialog').should('exist');

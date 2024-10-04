@@ -1,15 +1,14 @@
-/* global describe it cy beforeEach require afterEach Cypress */
+/* global describe it cy beforeEach require Cypress */
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
 var writerHelper = require('../../common/writer_helper');
 
 describe(['tagdesktop'], 'Top toolbar tests.', function() {
-	var origTestFileName = 'top_toolbar.odt';
-	var testFileName;
+	var newFilePath;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		newFilePath = helper.setupAndLoadDocument('writer/top_toolbar.odt');
 		desktopHelper.switchUIToNotebookbar();
 
 		if (Cypress.env('INTEGRATION') === 'nextcloud') {
@@ -19,80 +18,98 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 		writerHelper.selectAllTextOfDoc();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	function refreshCopyPasteContainer() {
 		helper.typeIntoDocument('{rightArrow}');
 		writerHelper.selectAllTextOfDoc();
 	}
 
 	it('Apply highlight color.', function() {
+		helper.setDummyClipboardForCopy();
 		desktopHelper.actionOnSelector('backColor', (selector) => { cy.cGet(selector).click(); });
-		desktopHelper.selectColorFromPalette('FFF2CC');
+		desktopHelper.selectColorFromPalette('FFB66C');
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p font span')
-			.should('have.attr', 'style', 'background: #fff2cc');
+			.should('have.attr', 'style', 'background: #ffb66c');
 	});
 
 	it('Apply font color.', function() {
+		helper.setDummyClipboardForCopy();
 		desktopHelper.actionOnSelector('fontColor', (selector) => { cy.cGet(selector).click(); });
-		desktopHelper.selectColorFromPalette('8E7CC3');
+		desktopHelper.selectColorFromPalette('3FAF46');
 		writerHelper.selectAllTextOfDoc();
-		cy.cGet('#copy-paste-container p font').should('have.attr', 'color', '#8e7cc3');
+		helper.copy();
+		cy.cGet('#copy-paste-container p font').should('have.attr', 'color', '#3faf46');
 	});
 
 	it('Apply style.', function() {
-		cy.cGet('.notebookbar.ui-iconview-entry img[title=Title]').click({force: true});
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('.notebookbar.ui-iconview-entry img[title=Title]').click();
 		refreshCopyPasteContainer();
+		helper.copy();
 		cy.cGet('#copy-paste-container p font font').should('have.attr', 'style', 'font-size: 28pt');
 	});
 
 	it('Apply font name.', function() {
+		helper.setDummyClipboardForCopy();
 		desktopHelper.actionOnSelector('fontName', (selector) => { cy.cGet(selector).click(); });
 		desktopHelper.selectFromJSDialogListbox('Alef', true);
 		refreshCopyPasteContainer();
+		helper.copy();
 		cy.cGet('#copy-paste-container p font').should('have.attr', 'face', 'Alef');
 	});
 
 	it('Apply bold font.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('.notebookbar > .unoBold > button').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p b').should('exist');
 	});
 
 	it('Apply italic font.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('.notebookbar > .unoItalic > button').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p i').should('exist');
 	});
 
 	it('Apply underline.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('.notebookbar > .unoUnderline > button').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p u').should('exist');
 	});
 
 	it('Apply strikethrough.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('.notebookbar > .unoStrikeout > button').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p strike').should('exist');
 	});
 
 	it('Apply font size', function() {
+		helper.setDummyClipboardForCopy();
 		desktopHelper.actionOnSelector('fontSize', (selector) => { cy.cGet(selector).click(); });
 		desktopHelper.selectFromJSDialogListbox('72', false);
 		refreshCopyPasteContainer();
+		helper.copy();
 		cy.cGet('#copy-paste-container p font').should('have.attr', 'style', 'font-size: 72pt');
 	});
 
 	it('Clear direct formatting', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('.notebookbar > .unoBold > button').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p b').should('exist');
 		cy.cGet('.notebookbar > .unoResetAttributes').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p b').should('not.exist');
 	});
 
@@ -112,34 +129,43 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Apply justified.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('#Home .notebookbar > div.unoJustifyPara > button.unobutton').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p').should('have.attr', 'align', 'justify');
 	});
 
 	it('Apply Line spacing: 1 and 1.5', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('#Home .notebookbar .unoLineSpacing button').click();
-		cy.cGet('[id$=line-spacing-menu]').contains('.menu-text', 'Line Spacing: 1.5').click();
+		cy.cGet('[id$=home-line-spacing-entries]').contains('.ui-combobox-entry', 'Line Spacing: 1.5').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p').should('have.attr', 'style').should('contain', 'line-height: 150%');
 		cy.cGet('#Home .notebookbar .unoLineSpacing button').click();
-		cy.cGet('[id$=line-spacing-menu]').contains('.menu-text', 'Line Spacing: 1').click();
+		cy.cGet('[id$=home-line-spacing-entries]').contains('.ui-combobox-entry', 'Line Spacing: 1').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p').should('have.attr', 'style').should('contain', 'line-height: 100%');
 	});
 
 	it('Apply Line spacing: 2', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('#Home .notebookbar .unoLineSpacing button').click();
-		cy.cGet('[id$=line-spacing-menu]').contains('.menu-text', 'Line Spacing: 2').click();
+		cy.cGet('[id$=home-line-spacing-entries]').contains('.ui-combobox-entry', 'Line Spacing: 2').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p').should('have.attr', 'style').should('contain', 'line-height: 200%');
 	});
 
 	it('Increase/Decrease Paragraph spacing', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('.notebookbar .unoLineSpacing button').click();
-		cy.cGet('[id$=line-spacing-menu]').contains('.menu-text', 'Increase Paragraph Spacing').click();
+		cy.cGet('[id$=home-line-spacing-entries]').contains('.ui-combobox-entry', 'Increase Paragraph Spacing').click();
 
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container p').should('have.attr', 'style')
 			.should('contain', 'margin-top: 0.04in');
@@ -147,9 +173,10 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 		writerHelper.selectAllTextOfDoc();
 
 		cy.cGet('.notebookbar .unoLineSpacing button').click();
-		cy.cGet('[id$=line-spacing-menu]').contains('.menu-text', 'Decrease Paragraph Spacing').click();
+		cy.cGet('[id$=home-line-spacing-entries]').contains('.ui-combobox-entry', 'Decrease Paragraph Spacing').click();
 
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container p')
 			.should('have.attr', 'style')
@@ -157,21 +184,27 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Toggle numbered list.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('#Home-container .unoDefaultNumbering').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container ol').should('exist');
 	});
 
 	it('Toggle bulleted list.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('#Home-container .unoDefaultBullet').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container ul').should('exist');
 	});
 
 	it('Increase/Decrease Indent.', function() {
+		helper.setDummyClipboardForCopy();
 		//Increase indent
 		cy.cGet('#Home-container .unoIncrementIndent').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p')
 			.should('have.attr', 'style')
 			.should('contain', 'margin-left: 0.49in');
@@ -179,18 +212,18 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 		//Decrease indent
 		cy.cGet('#Home-container .unoDecrementIndent').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p')
 			.should('have.attr', 'style')
 			.should('not.contain', 'margin-left: 0.49in');
 	});
 
 	it('Insert/delete table.', function() {
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.wait(500);
-		cy.cGet('#Home-container .unoInsertTable').click();
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#Home-container .unoInsertTable button').click({force: true});
 		cy.cGet('.inserttable-grid > .row > .col').eq(3).click();
 		helper.typeIntoDocument('{ctrl}a');
+		helper.copy();
 		cy.cGet('#copy-paste-container table').should('exist');
 		helper.typeIntoDocument('{ctrl}a');
 		helper.typeIntoDocument('{shift}{del}');
@@ -198,62 +231,60 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Insert image.', function() {
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#Home-container .unoInsertGraphic').click();
+		cy.cGet('#Home-container .unoInsertGraphic').click({force: true});
 		cy.cGet('#insertgraphic[type=file]').attachFile('/desktop/writer/image_to_insert.png');
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g.Graphic').should('exist');
+		cy.cGet('#document-container svg g.Graphic').should('exist');
 	});
 
 	it('Insert hyperlink.', function() {
-		helper.expectTextForClipboard('text text1');
-		cy.cGet('#Insert-tab-label').click();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#Insert-container .hyperlinkdialog').click();
-		cy.cGet('#hyperlink-link-box').should('exist');
-		cy.cGet('#hyperlink-text-box').type('link');
-		cy.cGet('#hyperlink-link-box').type('www.something.com');
-		cy.cGet('#response-ok').click();
+		helper.setDummyClipboardForCopy();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
+		helper.expectTextForClipboard('text text1');
+		cy.wait(500);
+		cy.cGet('#Insert-tab-label').click();
+		cy.cGet('#Insert-container .hyperlinkdialog button').click();
+		cy.cGet('#hyperlink-link-box-input').should('exist');
+		cy.cGet('#hyperlink-text-box').type('link');
+		cy.cGet('#hyperlink-link-box-input').type('www.something.com');
+		cy.cGet('#response-ok').click();
+		helper.copy();
 		helper.expectTextForClipboard('text text1link');
 		cy.cGet('#copy-paste-container p a').should('have.attr', 'href', 'http://www.something.com/');
 	});
 
 	it('Insert/delete shape.', function() {
 		cy.cGet('#Insert-tab-label').click();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-
-		cy.cGet('#Insert-container .unoBasicShapes').click();
-
+		cy.cGet('#Insert-container .unoBasicShapes button').click();
 		cy.cGet('.col.w2ui-icon.basicshapes_octagon').click();
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g').should('exist');
+		cy.cGet('#document-container svg g').should('exist');
 
 		//delete
 		helper.typeIntoDocument('{del}');
 
-		cy.cGet('.leaflet-control-buttons-disabled path.leaflet-interactive')
+		cy.cGet('#test-div-shapeHandlesSection')
 			.should('not.exist');
 	});
 
 	it('Insert/delete chart.', function() {
 		cy.cGet('#Insert-tab-label').click();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#Insert-container .unoInsertObjectChart').click();
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g').should('exist');
+		cy.cGet('#Insert-container .unoInsertObjectChart button').click();
+
+		cy.cGet('#test-div-shapeHandlesSection').should('exist');
 
 		//delete
 		helper.typeIntoDocument('{del}');
-		cy.cGet('.leaflet-control-buttons-disabled path.leaflet-interactive')
-			.should('not.exist');
+
+		cy.cGet('#test-div-shapeHandlesSection').should('not.exist');
 	});
 
-	it('Save.', { defaultCommandTimeout: 60000 }, function() {
+	it('Save.', function() {
 		cy.cGet('.notebookbar > .unoBold > button').click();
 		cy.cGet('.notebookbar-shortcuts-bar .unoSave').click();
-		helper.reload(testFileName, 'writer', true);
-		cy.wait(2000);
+		helper.reloadDocument(newFilePath);
+		helper.setDummyClipboardForCopy();
 		writerHelper.selectAllTextOfDoc();
-		cy.wait(2000);
+		helper.copy();
 		cy.cGet('#copy-paste-container p b').should('exist');
 	});
 
@@ -265,25 +296,36 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 			});
 
 		cy.cGet('#File-tab-label').click();
-		cy.cGet('#File-container .unoPrint').click();
+		cy.cGet('#File-container .unoPrint button').click();
 
 		cy.get('@windowOpen').should('be.called');
 	});
 
 	it('Apply Undo/Redo.', function() {
+		helper.setDummyClipboardForCopy();
 		//Do
-		cy.cGet('.notebookbar > .unoItalic > button').click();
-		writerHelper.selectAllTextOfDoc();
+		cy.cGet('.notebookbar .unoItalic button').click();
+		helper.copy();
+		cy.wait(500); // wait for new clipboard
 		cy.cGet('#copy-paste-container p i').should('exist');
 
 		//Undo
-		cy.cGet('#Home-container .unoUndo').should('not.have.class','disabled').click();
-		writerHelper.selectAllTextOfDoc();
+		cy.cGet('#Home-container .unoUndo').should('not.have.attr','disabled');
+		cy.cGet('#Home-container .unoUndo button').click({force: true});
+		helper.copy();
+		cy.wait(500); // wait for new clipboard
 		cy.cGet('#copy-paste-container p i').should('not.exist');
 
+		// Dismiss tooltip
+		cy.cGet('#Home-tab-label').click();
+		cy.cGet('#Home-tab-label').click();
+		cy.cGet('[role="tooltip"]').should('not.exist');
+
 		//Redo
-		cy.cGet('#Home-container .unoRedo').click();
-		writerHelper.selectAllTextOfDoc();
+		cy.cGet('#Home-container .unoRedo').should('not.have.attr','disabled');
+		cy.cGet('#Home-container .unoRedo button').click({force: true});
+		helper.copy();
+		cy.wait(500); // wait for new clipboard
 		cy.cGet('#copy-paste-container p i').should('exist');
 	});
 
@@ -326,26 +368,19 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Insert Special Character.', function() {
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-		cy.wait(500);
 		cy.cGet('#Home-container .unospan-CharmapControl').click({force: true});
 		cy.cGet('.jsdialog-container.ui-dialog.ui-widget-content.lokdialog_container').should('be.visible');
 		cy.cGet('.ui-dialog-title').should('have.text', 'Special Characters');
 
 		// FIXME: dialog is not async, shows popup
-		helper.waitUntilIdle('#favchar1');
-		cy.cGet('#favchar1').click({force: true});
-		helper.waitUntilIdle('#SpecialCharactersDialog .ui-pushbutton.jsdialog.button-primary');
-		cy.cGet('#SpecialCharactersDialog .ui-pushbutton.jsdialog.button-primary').click({force: true});
-		// FIXME: CHANGE ABOVE TO:
-		// helper.clickOnIdle('#favchar1');
-		// helper.clickOnIdle('.ui-pushbutton.jsdialog.button-primary');
+		cy.cGet('#favchar1').click();
+		cy.cGet('#SpecialCharactersDialog .ui-pushbutton.jsdialog.button-primary').click();
 
 		//helper.expectTextForClipboard('€');
 	});
 
 	it('Clone Formatting.', function() {
+		helper.setDummyClipboardForCopy();
 		// Select one character at the beginning of the text.
 		helper.typeIntoDocument('{home}');
 		helper.textSelectionShouldNotExist();
@@ -368,6 +403,7 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 		writerHelper.selectAllTextOfDoc();
 
 		// Full word should have bold font.
+		helper.copy();
 		cy.cGet('#copy-paste-container p b').should('contain', 'text');
 	});
 
@@ -407,23 +443,29 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	});
 
 	it('Apply superscript.', function() {
+		helper.setDummyClipboardForCopy();
 		writerHelper.selectAllTextOfDoc();
 		cy.cGet('.notebookbar .unoSuperScript').click();
 		cy.cGet('.leaflet-layer').click('center');
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p sup').should('exist');
 	});
 
 	it('Apply subscript.', function() {
+		helper.setDummyClipboardForCopy();
 		writerHelper.selectAllTextOfDoc();
 		cy.cGet('.notebookbar .unoSubScript').click();
 		cy.cGet('.leaflet-layer').click('center');
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		cy.cGet('#copy-paste-container p sub').should('exist');
 	});
 
 	it('Delete Text', function() {
+		helper.setDummyClipboardForCopy();
 		helper.selectAllText();
+		helper.copy();
 		helper.expectTextForClipboard('text text1');
 		helper.typeIntoDocument('{del}');
 		helper.typeIntoDocument('{ctrl}a');
@@ -433,13 +475,70 @@ describe(['tagdesktop'], 'Top toolbar tests.', function() {
 	it('Insert/delete Fontwork', function() {
 		writerHelper.selectAllTextOfDoc();
 		cy.cGet('#Insert-tab-label').click();
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
 		cy.cGet('#Insert-container .unoFontworkGalleryFloater').click();
 		cy.cGet('#ok').click();
-		cy.cGet('.leaflet-control-buttons-disabled path.leaflet-interactive').should('exist');
+		cy.cGet('#test-div-shapeHandlesSection').should('exist');
 
 		//delete
 		helper.typeIntoDocument('{del}');
-		cy.cGet('.leaflet-control-buttons-disabled path.leaflet-interactive').should('not.exist');
+		cy.cGet('#test-div-shapeHandlesSection').should('not.exist');
+	});
+
+	it('Scroll', function() {
+		// Start all the way on the left side of the toolbar
+		cy.cGet('#Home-container #home-undo-redo').should('be.visible');
+		// TODO: Cypress thinks buttons are visible even though they are not
+		//cy.cGet('#Home-container #home-search-dialog').should('not.be.visible');
+		cy.cGet('#toolbar-up .ui-scroll-left').should('not.be.visible');
+		cy.cGet('#toolbar-up .ui-scroll-right').should('be.visible');
+
+		// Scroll right until the scroll right button is disabled
+		cy.waitUntil(function() {
+			cy.cGet('#toolbar-up .ui-scroll-right').click();
+			cy.wait(300); // Wait for scroll animation
+			return cy.cGet('#toolbar-up .ui-scroll-right')
+				.then(function(scrollRightButton) {
+					return !Cypress.dom.isVisible(scrollRightButton);
+				});
+		});
+
+		// Now we are all the way on the right side of the toolbar
+		// TODO: Cypress thinks buttons are visible even though they are not
+		//cy.cGet('#Home-container #home-undo-redo').should('not.be.visible');
+		cy.cGet('#Home-container #home-search-dialog').should('be.visible');
+		cy.cGet('#toolbar-up .ui-scroll-left').should('be.visible');
+		cy.cGet('#toolbar-up .ui-scroll-right').should('not.be.visible');
+
+		// Scroll left until the scroll left button is disabled
+		cy.waitUntil(function() {
+			cy.cGet('#toolbar-up .ui-scroll-left').click();
+			cy.wait(300); // Wait for scroll animation
+			return cy.cGet('#toolbar-up .ui-scroll-left')
+				.then(function(scrollLeftButton) {
+					return !Cypress.dom.isVisible(scrollLeftButton);
+				});
+		});
+
+		// Now back on the left side of the toolbar
+		cy.cGet('#Home-container #home-undo-redo').should('be.visible');
+		// TODO: Cypress thinks buttons are visible even though they are not
+		//cy.cGet('#Home-container #home-search-dialog').should('not.be.visible');
+		cy.cGet('#toolbar-up .ui-scroll-left').should('not.be.visible');
+		cy.cGet('#toolbar-up .ui-scroll-right').should('be.visible');
+	});
+
+	it('Switch Tabs', function() {
+		// Start in Home tab
+		cy.cGet('.notebookbar#Home').should('be.visible');
+		cy.cGet('#Home-tab-label').should('have.class','selected');
+		cy.cGet('.notebookbar#Insert').should('not.be.visible');
+		cy.cGet('#Insert-tab-label').should('not.have.class','selected');
+
+		// Switch to Insert tab
+		cy.cGet('#Insert-tab-label').click();
+		cy.cGet('.notebookbar#Home').should('not.be.visible');
+		cy.cGet('#Home-tab-label').should('not.have.class','selected');
+		cy.cGet('.notebookbar#Insert').should('be.visible');
+		cy.cGet('#Insert-tab-label').should('have.class','selected');
 	});
 });

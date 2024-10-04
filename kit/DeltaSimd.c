@@ -10,10 +10,14 @@
 // versions of inlined code that get injected outside of this
 // module by the linker.
 
-#include <config.h>
+#include "config.h"
+
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <endian.h>
+
 #include "DeltaSimd.h"
 
 #if ENABLE_SIMD
@@ -92,17 +96,18 @@ void simd_deltaInit(void)
 }
 
 // accelerated compression of a 256 pixel run
-int simd_initPixRowSimd(const uint32_t *from, uint32_t *scratch, size_t *scratchLen, uint64_t *rleMaskBlock)
+int simd_initPixRowSimd(const uint32_t *from, uint32_t *scratch, size_t *scratchLen, uint64_t *rleMaskBlockWide)
 {
 #if !ENABLE_SIMD
     // no fun.
-    (void)from; (void)scratch; (void)scratchLen; (void)rleMaskBlock;
+    (void)from; (void)scratch; (void)scratchLen; (void)rleMaskBlockWide;
     return 0;
 
 #else // ENABLE_SIMD
 
     *scratchLen = 0;
-    for (unsigned int x = 0; x < 4; ++x)
+    uint8_t *rleMaskBlock = (uint8_t *)rleMaskBlockWide;
+    for (unsigned int x = 0; x < 256/8; ++x)
         rleMaskBlock[x] = 0;
 
     const uint32_t* block = from;
@@ -111,7 +116,7 @@ int simd_initPixRowSimd(const uint32_t *from, uint32_t *scratch, size_t *scratch
 
     for (unsigned int x = 0; x < 256; x += 8) // 8 pixels per cycle
     {
-        __m256i curr = _mm256_loadu_si256((const __m256i_u*)(block));
+        __m256i curr = _mm256_loadu_si256((const __m256i_u*)(block + x));
 
         // Generate mask
 
@@ -132,17 +137,17 @@ int simd_initPixRowSimd(const uint32_t *from, uint32_t *scratch, size_t *scratch
         uint64_t newMask = diffMask(prev, curr);
         assert (newMask < 256);
 
-        {
-            unsigned int nMask = x >> 6; // 64 bits per mask
-            unsigned int i = (x >> 3) & 0x7; // chunk of bits we work on
-            rleMaskBlock[nMask] |= newMask << (i * 8);
-        }
+        // invert bitmask for counting non-same foo ... [!]
+        uint32_t newMaskInverse = ~newMask & 0xff;
+
+        // stash our mask for these 8 pixels
+        rleMaskBlock[x>>3] = newMask;
 
         // Shuffle the pixels and pack them
         __m256i control_vector = _mm256_loadu_si256(&vpermd_lut[newMask]);
         __m256i packed = _mm256_permutevar8x32_epi32(curr, control_vector);
 
-        unsigned int countBitsUnset = _mm_popcnt_u32(newMask ^ 0xff);
+        unsigned int countBitsUnset = _mm_popcnt_u32(newMaskInverse);
         assert(countBitsUnset <= 8);
 
         // over-store in dest: we are guaranteed enough space worst-case
@@ -154,8 +159,10 @@ int simd_initPixRowSimd(const uint32_t *from, uint32_t *scratch, size_t *scratch
                     "%4x%4x%4x%4x%4x%4x%4x%4x\n"
                     "%4x%4x%4x%4x%4x%4x%4x%4x\n",
                     (unsigned int)newMask, countBitsUnset,
-                    block[0], block[1], block[2], block[3], block[4], block[5], block[6], block[7],
-                    dest[0], dest[1], dest[2], dest[3], dest[4], dest[5], dest[6], dest[7]);
+                    block[x + 0], block[x + 1], block[x + 2], block[x + 3],
+                    block[x + 4], block[x + 5], block[x + 6], block[x + 7],
+                    dest[0], dest[1], dest[2], dest[3],
+                    dest[4], dest[5], dest[6], dest[7]);
 #endif
 
         // move on for the next run.
@@ -163,13 +170,15 @@ int simd_initPixRowSimd(const uint32_t *from, uint32_t *scratch, size_t *scratch
 
         // stash current for use next time around
         prev = curr;
-
-        block += 8;
     }
     *scratchLen += dest - scratch;
 
+    // a no-op for LE architectures - ~everyone.
+    for (unsigned int x = 0; x < 4; ++x)
+        rleMaskBlockWide[x] = htole64(rleMaskBlockWide[x]);
+
     return 1;
-#endif
+#endif // ENABLE_SIMD
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

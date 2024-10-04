@@ -1,18 +1,12 @@
-/* global describe it cy beforeEach require afterEach expect*/
+/* global describe it cy beforeEach require expect*/
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe(['tagmobile', 'tagproxy'], 'Focus tests', function() {
-	var origTestFileName = 'focus.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('writer/focus.odt');
 	});
 
 	it('Basic document focus.', function() {
@@ -41,11 +35,11 @@ describe(['tagmobile', 'tagproxy'], 'Focus tests', function() {
 		mobileHelper.enableEditingMobile();
 		mobileHelper.openMobileWizard();
 		// Open paragraph properties
-		helper.clickOnIdle('#Paragraph');
+		cy.cGet('#Paragraph').click();
 		cy.cGet('#aboveparaspacing .spinfield').should('have.value', '0');
 		// Need to wait before clicking on spinfield
 		cy.wait(500);
-		helper.clickOnIdle('#aboveparaspacing .spinfield');
+		cy.cGet('#aboveparaspacing .spinfield').click();
 		// The spinfield should have the focus now.
 		helper.assertFocus('className', 'spinfield');
 		mobileHelper.closeMobileWizard();
@@ -72,27 +66,27 @@ describe(['tagmobile', 'tagproxy'], 'Focus tests', function() {
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Shape').click();
 		cy.cGet('.col.w2ui-icon.basicshapes_rectangle').click();
 		// Check that the shape is there
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g').should('exist');
+		cy.cGet('#canvas-container > svg').should('exist');
 		// One tap on the shape
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg')
+		cy.cGet('#canvas-container > svg > svg')
 			.then(function(svg) {
-				expect(svg[0].getBBox().width).to.be.greaterThan(0);
-				expect(svg[0].getBBox().height).to.be.greaterThan(0);
-				var posX = svg[0].getBBox().x + svg[0].getBBox().width / 2;
-				var posY = svg[0].getBBox().y + svg[0].getBBox().height / 2;
-				cy.cGet('#document-container').click(posX, posY);
+				expect(parseInt(svg[0].style.width.replace('px', ''))).to.be.greaterThan(0);
+				expect(parseInt(svg[0].style.height.replace('px', ''))).to.be.greaterThan(0);
+				var posX = parseInt(svg[0].style.width.replace('px', '')) + parseInt(svg[0].style.left.replace('px', '')) / 2;
+				var posY = parseInt(svg[0].style.height.replace('px', '')) + parseInt(svg[0].style.top.replace('px', '')) / 2;
+				cy.cGet('.leaflet-layer').click(posX, posY);
 			});
 
 		// No focus on the document
 		helper.assertFocus('tagName', 'BODY');
 
 		// Double tap on the shape
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg')
+		cy.cGet('#canvas-container > svg > svg')
 			.then(function(svg) {
-				expect(svg[0].getBBox().width).to.be.greaterThan(0);
-				expect(svg[0].getBBox().height).to.be.greaterThan(0);
-				var posX = svg[0].getBBox().x + svg[0].getBBox().width / 2;
-				var posY = svg[0].getBBox().y + svg[0].getBBox().height / 2;
+				expect(parseInt(svg[0].style.width.replace('px', ''))).to.be.greaterThan(0);
+				expect(parseInt(svg[0].style.height.replace('px', ''))).to.be.greaterThan(0);
+				var posX = parseInt(svg[0].style.width.replace('px', '')) + parseInt(svg[0].style.left.replace('px', '')) / 2;
+				var posY = parseInt(svg[0].style.height.replace('px', '')) + parseInt(svg[0].style.top.replace('px', '')) / 2;
 
 				cy.cGet('#document-container').dblclick(posX, posY);
 			});
@@ -127,8 +121,8 @@ describe(['tagmobile', 'tagproxy'], 'Focus tests', function() {
 		// No focus
 		helper.assertFocus('tagName', 'BODY');
 		// Apply bold
-		helper.clickOnIdle('.unoBold');
-		cy.cGet('.unoBold').should('have.class', 'selected');
+		cy.cGet('#mobile-wizard .unoBold').click();
+		cy.cGet('#mobile-wizard .unoBold').should('have.class', 'selected');
 		// No focus
 		helper.assertFocus('tagName', 'BODY');
 		mobileHelper.closeMobileWizard();
@@ -140,10 +134,10 @@ describe(['tagmobile', 'tagproxy'], 'Focus tests', function() {
 		// Grab focus to the document
 		helper.typeIntoDocument('x');
 		helper.selectAllText();
-		cy.cGet('#tb_editbar_item_bold div table').should('not.have.class', 'checked');
+		cy.cGet('#toolbar-down .unoBold').should('not.have.class', 'selected');
 		helper.assertHaveKeyboardInput();
-		cy.cGet('#tb_editbar_item_bold').click();
-		cy.cGet('#tb_editbar_item_bold div table').should('have.class', 'checked');
+		cy.cGet('#toolbar-down .unoBold').click();
+		cy.cGet('#toolbar-down .unoBold').should('have.class', 'selected');
 		helper.assertHaveKeyboardInput();
 	});
 
@@ -153,10 +147,10 @@ describe(['tagmobile', 'tagproxy'], 'Focus tests', function() {
 		// Grab focus to the document
 		helper.typeIntoDocument('x');
 		helper.selectAllText();
-		cy.cGet('#tb_editbar_item_italic div table').should('not.have.class', 'checked');
+		cy.cGet('#toolbar-down .unoItalic').should('not.have.class', 'selected');
 		helper.assertHaveKeyboardInput();
-		cy.cGet('#tb_editbar_item_italic').click();
-		cy.cGet('#tb_editbar_item_italic div table').should('have.class', 'checked');
+		cy.cGet('#toolbar-down .unoItalic').click();
+		cy.cGet('#toolbar-down .unoItalic').should('have.class', 'selected');
 		helper.assertHaveKeyboardInput();
 	});
 
@@ -166,10 +160,10 @@ describe(['tagmobile', 'tagproxy'], 'Focus tests', function() {
 		// Grab focus to the document
 		helper.typeIntoDocument('x');
 		helper.selectAllText();
-		cy.cGet('#tb_editbar_item_underline div table').should('not.have.class', 'checked');
+		cy.cGet('#toolbar-down .unoUnderline').should('not.have.class', 'selected');
 		helper.assertHaveKeyboardInput();
-		cy.cGet('#tb_editbar_item_underline').click();
-		cy.cGet('#tb_editbar_item_underline div table').should('have.class', 'checked');
+		cy.cGet('#toolbar-down .unoUnderline').click();
+		cy.cGet('#toolbar-down .unoUnderline').should('have.class', 'selected');
 		helper.assertHaveKeyboardInput();
 	});
 });

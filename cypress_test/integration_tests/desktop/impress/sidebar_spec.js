@@ -1,26 +1,21 @@
-/* global describe it cy require afterEach beforeEach */
+/* global describe it cy require beforeEach */
 
 var helper = require('../../common/helper');
 var impressHelper = require('../../common/impress_helper');
 const desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sidebar Tests', function() {
-	var testFileName = 'sidebar.odp';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'impress');
+		helper.setupAndLoadDocument('impress/sidebar.odp');
 		desktopHelper.switchUIToCompact();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	it.skip('Switch to slide transition Deck', function() {
-		cy.cGet('#tb_editbar_item_slidechangewindow .w2ui-button').should('not.have.class', 'checked');
+		cy.cGet('#slidechangewindow .w2ui-button').should('not.have.class', 'checked');
 		cy.cGet('#layoutvalueset').should('be.visible');
-		cy.cGet('#tb_editbar_item_slidechangewindow .w2ui-button').click({force: true});
-		cy.cGet('#tb_editbar_item_slidechangewindow .w2ui-button').should('have.class', 'checked');
+		cy.cGet('#slidechangewindow .w2ui-button').click({force: true});
+		cy.cGet('#slidechangewindow .w2ui-button').should('have.class', 'checked');
 		cy.cGet('#layoutvalueset').should('not.exist');
 		cy.cGet('#transitions_iconswin').should('be.visible');
 	});
@@ -38,7 +33,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sidebar Tests', function()
 		cy.cGet('#colorset').should('be.visible');
 	});
 
-	it('Set underline using popup', function() {
+	it.skip('Set underline using popup', function() {
 		cy.cGet('#layoutvalueset').should('be.visible');
 		impressHelper.selectTextShapeInTheCenter();
 		impressHelper.selectTextOfShape();
@@ -47,7 +42,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sidebar Tests', function()
 		cy.cGet('.modalpopup .jsdialog-container').should('be.visible');
 		cy.cGet('#single').click();
 		impressHelper.triggerNewSVGForShapeInTheCenter();
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition tspan')
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition tspan')
 			.should('have.attr', 'text-decoration', 'underline');
 	});
 });

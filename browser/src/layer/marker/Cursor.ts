@@ -1,11 +1,10 @@
 /* eslint-disable */
 
-declare var $: any;
 declare var L: any;
 
 /*
  * Cursor implements a blinking cursor.
- * This is used as the text-cursor(in and out of document) and view-cursor.
+ * This is used as the text-cursor(in and out of document).
  */
 
 class Cursor {
@@ -58,9 +57,6 @@ class Cursor {
 
 		this.update();
 
-		let cursor_css = getComputedStyle(this.cursor, null);
-		this.width = parseFloat(cursor_css.getPropertyValue("width"));
-
 		if (this.map._docLayer.isCalc())
 			this.map.on('splitposchanged move', this.update, this);
 		else
@@ -84,6 +80,8 @@ class Cursor {
 		if (this.domAttached && this.container && this.container.querySelector('.blinking-cursor') !== null) {
 			$('.leaflet-interactive').css('cursor', 'text');
 		}
+		this.addCursorClass(app.file.textCursor.visible);
+		this.setOpacity(app.file.textCursor.visible ? 1: 0);
 	}
 
 	remove() {
@@ -257,6 +255,9 @@ class Cursor {
 		L.DomEvent
 			.disableClickPropagation(this.cursor)
 			.disableScrollPropagation(this.container);
+
+		let cursorCss = getComputedStyle(this.cursor, null);
+		this.width = parseFloat(cursorCss.getPropertyValue('width'));
 	}
 
 	private transformX(xpos: number): number {

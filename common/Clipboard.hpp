@@ -32,6 +32,36 @@ struct ClipboardData
     {
     }
 
+    /// Determines if inStream is a list of mimetype-length-bytes tuples, as expected.
+    static bool isOwnFormat(std::istream& inStream)
+    {
+        if (inStream.eof())
+        {
+            return false;
+        }
+
+        std::string mime, hexLen;
+        std::getline(inStream, mime, '\n');
+        if (mime.empty())
+        {
+            return false;
+        }
+
+        std::getline(inStream, hexLen, '\n');
+        if (hexLen.empty())
+        {
+            return false;
+        }
+
+        uint64_t len = strtoll(hexLen.c_str(), nullptr, 16);
+        if (len == 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     void read(std::istream& inStream)
     {
         while (!inStream.eof())
@@ -95,8 +125,7 @@ class ClipboardCache
 
         bool hasExpired(const std::chrono::steady_clock::time_point &now)
         {
-            return std::chrono::duration_cast<std::chrono::minutes>(
-                now - _inserted).count() >= CLIPBOARD_EXPIRY_MINUTES;
+            return (now - _inserted) >= std::chrono::minutes(CLIPBOARD_EXPIRY_MINUTES);
         }
     };
     // clipboard key -> data

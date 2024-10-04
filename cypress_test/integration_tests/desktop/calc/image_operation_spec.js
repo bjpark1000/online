@@ -1,28 +1,21 @@
-/* global describe it cy require afterEach beforeEach */
+/* global describe it cy require beforeEach */
 
 var helper = require('../../common/helper');
 var { insertImage, deleteImage, assertImageSize } = require('../../common/desktop_helper');
 var desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop'], 'Image Operation Tests', function() {
-	var origTestFileName = 'image_operation.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		helper.setupAndLoadDocument('calc/image_operation.ods');
 		desktopHelper.switchUIToNotebookbar();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	it('Insert/Delete Image',function() {
 		insertImage('calc');
 
 		//make sure that image is in focus
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g.leaflet-control-buttons-disabled')
-			.should('exist');
+		cy.cGet('#document-container svg g').should('exist');
 
 		deleteImage();
 	});

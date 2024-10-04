@@ -56,6 +56,7 @@
 #include <cassert>
 #include <chrono>
 #include <iomanip>
+#include <fstream>
 
 #include "Log.hpp"
 #include "TraceEvent.hpp"
@@ -181,15 +182,16 @@ inline bool impl_encodeSubBufferToPNG(unsigned char* pixmap, size_t startX, size
         return false;
     }
 
-#if MOBILEAPP
-    png_set_compression_level(png_ptr, Z_BEST_SPEED);
-#else
-    // Level 4 gives virtually identical compression
-    // ratio to level 6, but is between 5-10% faster.
-    // Level 3 runs almost twice as fast, but the
-    // output is typically 2-3x larger.
-    png_set_compression_level(png_ptr, 4);
-#endif
+    if (Util::isMobileApp())
+        png_set_compression_level(png_ptr, Z_BEST_SPEED);
+    else
+    {
+        // Level 4 gives virtually identical compression
+        // ratio to level 6, but is between 5-10% faster.
+        // Level 3 runs almost twice as fast, but the
+        // output is typically 2-3x larger.
+        png_set_compression_level(png_ptr, 4);
+    }
 
     png_set_IHDR(png_ptr, info_ptr, width, height, 8, PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
@@ -339,6 +341,25 @@ std::vector<png_bytep> decodePNG(std::stringstream& stream, png_uint_32& height,
     png_destroy_read_struct(&ptrPNG, &ptrInfo, &ptrEnd);
 
     return rows;
+}
+
+inline std::vector<char> loadPng(const char *relpath,
+                                 uint32_t& height,
+                                 uint32_t& width,
+                                 uint32_t& rowBytes)
+{
+    std::ifstream file(relpath);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    file.close();
+    png_uint_32 h, w, rb;
+    std::vector<png_bytep> rows = decodePNG(buffer, h, w, rb);
+    height = h; width = w; rowBytes = rb;
+    std::vector<char> output;
+    for (png_uint_32 y = 0; y < height; ++y)
+        for (png_uint_32 i = 0; i < width * 4; ++i)
+            output.push_back(rows[y][i]);
+    return output;
 }
 
 }

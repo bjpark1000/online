@@ -11,7 +11,6 @@
 #include <chrono>
 #include <map>
 #include <string>
-#include <vector>
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -34,11 +33,19 @@ class TraceEvent
 private:
     static void emitInstantEvent(const std::string& name, const std::string& args);
 
+    const std::string _args;
+    int _pid; //< -1 when not recording, or done recording.
+
 protected:
     static std::atomic<bool> recordingOn; // True during recoding/emission
-    int _pid;
-    std::string _args;
     thread_local static int threadLocalNesting; // For use only by the ProfileZone derived class
+
+    /// Reset the pid when done recording.
+    void reset() { _pid = -1; }
+
+    int pid() const { return _pid; }
+
+    const std::string& args() const { return _args; }
 
     static long getThreadId()
     {
@@ -59,7 +66,10 @@ protected:
         if (!recordingOn)
             return "0";
 
-        std::string result = "{";
+        std::string result;
+        result.reserve(args.size() * 64);
+
+        result += '{';
         bool first = true;
         for (const auto& i : args)
         {
@@ -77,15 +87,13 @@ protected:
         return result;
     }
 
-    TraceEvent(const std::string &args)
-        : _pid(-1)
-        , _args(args)
+    explicit TraceEvent(std::string args)
+        : _args(std::move(args))
+        , _pid(recordingOn ? getpid() : -1)
     {
-        if (recordingOn)
-        {
-            _pid = getpid();
-        }
     }
+
+    virtual ~TraceEvent() = default;
 
 public:
     static void startRecording();
@@ -122,26 +130,27 @@ public:
 
 class NamedEvent : public TraceEvent
 {
-protected:
     const std::string _name;
 
-    NamedEvent(const std::string& name)
-        : TraceEvent(std::string())
-        , _name(name)
+protected:
+    explicit NamedEvent(std::string name)
+        : NamedEvent(std::move(name), std::string())
     {
     }
 
-    NamedEvent(const std::string& name, const std::string& args)
-        : TraceEvent(args)
-        , _name(name)
+    NamedEvent(std::string name, std::string args)
+        : TraceEvent(std::move(args))
+        , _name(std::move(name))
     {
     }
 
-    NamedEvent(const std::string& name, const std::map<std::string, std::string>& args)
-        : TraceEvent(createArgsString(args))
-        , _name(name)
+    NamedEvent(std::string name, const std::map<std::string, std::string>& args)
+        : NamedEvent(std::move(name), createArgsString(args))
     {
     }
+
+public:
+    const std::string& name() const { return _name; }
 };
 
 class ProfileZone : public NamedEvent
@@ -152,8 +161,8 @@ private:
 
     void emitRecording();
 
-    ProfileZone(const std::string& name, const std::string &args)
-        : NamedEvent(name, args)
+    ProfileZone(std::string name, std::string args)
+        : NamedEvent(std::move(name), std::move(args))
         , _nesting(-1)
     {
         if (recordingOn)
@@ -165,29 +174,18 @@ private:
         }
     }
 
-public:
-    ProfileZone(const std::string& name, const std::map<std::string, std::string> &arguments)
-        : ProfileZone(name, createArgsString(arguments))
+    void emitIfRecording()
     {
-    }
-
-    ProfileZone(const char* id)
-        : ProfileZone(id, std::string())
-    {
-    }
-
-    ~ProfileZone()
-    {
-        if (_pid > 0)
+        if (pid() > 0)
         {
             threadLocalNesting--;
 
             if (_nesting != threadLocalNesting)
             {
 #ifdef TEST_TRACEEVENT_EXE
-                std::cerr << "Incorrect ProfileZone nesting for " << _name << "\n";
+                std::cerr << "Incorrect ProfileZone nesting for " << name() << "\n";
 #else
-                LOG_WRN("Incorrect ProfileZone nesting for " << _name);
+                LOG_WRN("Incorrect ProfileZone nesting for " << name());
 #endif
             }
             else
@@ -197,8 +195,32 @@ public:
         }
     }
 
+public:
+    ProfileZone(std::string name, const std::map<std::string, std::string>& arguments)
+        : ProfileZone(std::move(name), createArgsString(arguments))
+    {
+    }
+
+    explicit ProfileZone(std::string name)
+        : ProfileZone(std::move(name), std::string())
+    {
+    }
+
+    explicit ProfileZone(const char* id)
+        : ProfileZone(id, std::string())
+    {
+    }
+
+    ~ProfileZone() { emitIfRecording(); }
+
     ProfileZone(const ProfileZone&) = delete;
     void operator=(const ProfileZone&) = delete;
+
+    void end()
+    {
+        emitIfRecording();
+        reset(); // So we don't re-emit on destruction.
+    }
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

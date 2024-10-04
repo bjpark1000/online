@@ -1,36 +1,28 @@
-/* global describe it cy require afterEach Cypress */
+/* global describe it cy require Cypress */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var nextcloudHelper = require('../../common/nextcloud_helper');
 
 describe(['tagnextcloud'], 'Nextcloud specific tests.', function() {
-	var origTestFileName = 'nextcloud.odt';
-	var testFileName;
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
 
 	it('Insert image from storage.', function() {
-		helper.upLoadFileToNextCloud('image_to_insert.png', 'writer');
-
-		testFileName = helper.beforeAll(origTestFileName, 'writer', undefined, true);
-
+		helper.setupAndLoadDocument('writer/nextcloud.odt');
 		mobileHelper.enableEditingMobile();
 
+		helper.upLoadFileToNextCloud('writer/image_to_insert.png');
 		nextcloudHelper.insertImageFromStorage('image_to_insert.png');
 
-		cy.get('.leaflet-pane.leaflet-overlay-pane svg g.Graphic')
+		cy.get('#document-container svg g.Graphic')
 			.should('exist');
 	});
 
 	it('Save as.', function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
-
+		var newFilePath = helper.setupAndLoadDocument('writer/nextcloud.odt');
+		var newFileName = helper.getFileName(newFilePath);
 		mobileHelper.enableEditingMobile();
 
-		nextcloudHelper.saveFileAs('1' + testFileName);
+		nextcloudHelper.saveFileAs('1' + newFileName);
 
 		// Close the document
 		cy.get('#mobile-edit-button')
@@ -43,16 +35,15 @@ describe(['tagnextcloud'], 'Nextcloud specific tests.', function() {
 				Cypress.env('IFRAME_LEVEL', '');
 			});
 
-		cy.get('tr[data-file=\'1' + testFileName + '\']')
+		cy.get('tr[data-file=\'1' + newFileName + '\']')
 			.should('be.visible');
 
-		cy.get('tr[data-file=\'' + testFileName + '\']')
+		cy.get('tr[data-file=\'' + newFileName + '\']')
 			.should('be.visible');
 	});
 
 	it('Share.', function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
-
+		helper.setupAndLoadDocument('writer/nextcloud.odt');
 		mobileHelper.enableEditingMobile();
 
 		nextcloudHelper.checkAndCloseSharing();

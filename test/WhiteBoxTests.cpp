@@ -20,13 +20,13 @@
 #include <Common.hpp>
 #include <FileUtil.hpp>
 #include <Kit.hpp>
-#include <MessageQueue.hpp>
 #include <Protocol.hpp>
 #include <TileDesc.hpp>
 #include <Util.hpp>
 #include <JsonUtil.hpp>
 
 #include <common/Message.hpp>
+#include <common/ThreadPool.hpp>
 #include <wsd/FileServer.hpp>
 #include <net/Buffer.hpp>
 #include <net/NetUtil.hpp>
@@ -49,7 +49,6 @@ class WhiteBoxTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testReplaceAllOf);
     CPPUNIT_TEST(testRegexListMatcher);
     CPPUNIT_TEST(testRegexListMatcher_Init);
-    CPPUNIT_TEST(testEmptyCellCursor);
     CPPUNIT_TEST(testTileDesc);
     CPPUNIT_TEST(testTileData);
     CPPUNIT_TEST(testRectanglesIntersect);
@@ -58,19 +57,15 @@ class WhiteBoxTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testIso8601Time);
     CPPUNIT_TEST(testClockAsString);
     CPPUNIT_TEST(testBufferClass);
-    CPPUNIT_TEST(testHexify);
     CPPUNIT_TEST(testStat);
     CPPUNIT_TEST(testStringCompare);
     CPPUNIT_TEST(testParseUri);
     CPPUNIT_TEST(testParseUriUrl);
     CPPUNIT_TEST(testParseUrl);
     CPPUNIT_TEST(testSafeAtoi);
-    CPPUNIT_TEST(testBytesToHex);
     CPPUNIT_TEST(testJsonUtilEscapeJSONValue);
-#if ENABLE_DEBUG
-    CPPUNIT_TEST(testUtf8);
-#endif
     CPPUNIT_TEST(testFindInVector);
+    CPPUNIT_TEST(testThreadPool);
     CPPUNIT_TEST_SUITE_END();
 
     void testCOOLProtocolFunctions();
@@ -82,7 +77,6 @@ class WhiteBoxTests : public CPPUNIT_NS::TestFixture
     void testReplaceAllOf();
     void testRegexListMatcher();
     void testRegexListMatcher_Init();
-    void testEmptyCellCursor();
     void testTileDesc();
     void testTileData();
     void testRectanglesIntersect();
@@ -91,17 +85,17 @@ class WhiteBoxTests : public CPPUNIT_NS::TestFixture
     void testIso8601Time();
     void testClockAsString();
     void testBufferClass();
-    void testHexify();
     void testStat();
     void testStringCompare();
     void testParseUri();
     void testParseUriUrl();
     void testParseUrl();
     void testSafeAtoi();
-    void testBytesToHex();
     void testJsonUtilEscapeJSONValue();
-    void testUtf8();
     void testFindInVector();
+    void testThreadPool();
+
+    size_t waitForThreads(size_t count);
 };
 
 void WhiteBoxTests::testCOOLProtocolFunctions()
@@ -553,125 +547,10 @@ void WhiteBoxTests::testRegexListMatcher_Init()
     LOK_ASSERT(matcher.match("192.168.."));
 }
 
-/// A stub DocumentManagerInterface implementation for unit test purposes.
-class DummyDocument : public DocumentManagerInterface
-{
-    std::shared_ptr<TileQueue> _tileQueue;
-    std::mutex _mutex;
-    std::mutex _documentMutex;
-public:
-    DummyDocument()
-        : _tileQueue(new TileQueue())
-    {
-    }
-
-    bool onLoad(const std::string& /*sessionId*/,
-                const std::string& /*uriAnonym*/,
-                const std::string& /*renderOpts*/) override
-    {
-        return false;
-    }
-
-    void onUnload(const ChildSession& /*session*/) override
-    {
-    }
-
-    std::shared_ptr<lok::Office> getLOKit() override
-    {
-        return nullptr;
-    }
-
-    std::shared_ptr<lok::Document> getLOKitDocument() override
-    {
-        return nullptr;
-    }
-
-    bool notifyAll(const std::string&) override
-    {
-        return true;
-    }
-
-    void notifyViewInfo() override
-    {
-    }
-
-    void updateEditorSpeeds(int, int) override
-    {
-    }
-
-    int getEditorId() const override
-    {
-        return -1;
-    }
-
-    std::map<int, UserInfo> getViewInfo() override
-    {
-        return {};
-    }
-
-    std::string getObfuscatedFileId() override
-    {
-        return std::string();
-    }
-
-    std::shared_ptr<TileQueue>& getTileQueue() override
-    {
-        return _tileQueue;
-    }
-
-    bool sendFrame(const char* /*buffer*/, int /*length*/, WSOpCode /*opCode*/) override
-    {
-        return true;
-    }
-
-    void alertAllUsers(const std::string& /*cmd*/, const std::string& /*kind*/) override
-    {
-    }
-
-    unsigned getMobileAppDocId() const override
-    {
-        return 0;
-    }
-
-    void trimIfInactive() override
-    {
-    }
-
-    bool isDocPasswordProtected() const override
-    {
-        return false;
-    }
-
-    bool haveDocPassword() const override
-    {
-        return false;
-    }
-
-    std::string getDocPassword() const override
-    {
-        return "";
-    }
-
-    DocumentPasswordType getDocPasswordType() const override
-    {
-        return DocumentPasswordType::ToView;
-    }
-
-    void updateActivityHeader() const override
-    {
-    }
-};
-
-void WhiteBoxTests::testEmptyCellCursor()
-{
-    DummyDocument document;
-    CallbackDescriptor callbackDescriptor{&document, 0};
-    // This failed as stoi raised an std::invalid_argument exception.
-    documentViewCallback(LOK_CALLBACK_CELL_CURSOR, "EMPTY", &callbackDescriptor);
-}
-
 void WhiteBoxTests::testTileDesc()
 {
+    constexpr auto testname = __func__;
+
     // simulate a previous overflow
     errno = ERANGE;
     TileDesc desc = TileDesc::parse(
@@ -680,6 +559,31 @@ void WhiteBoxTests::testTileDesc()
     TileCombined combined = TileCombined::parse(
         "tilecombine nviewid=0 part=5 width=256 height=256 tileposx=0,3072,6144,9216,12288,15360,18432,21504,0,3072,6144,9216,12288,15360,18432,21504,0,3072,6144,9216,12288,15360,18432,21504,0,3072,6144,9216,12288,15360,18432,21504,0,3072,6144,9216,12288,15360,18432,21504,0,3072,6144,9216,12288,15360,18432,21504,0,3072,6144,9216,12288,15360,18432,21504 tileposy=0,0,0,0,0,0,0,0,3072,3072,3072,3072,3072,3072,3072,3072,6144,6144,6144,6144,6144,6144,6144,6144,9216,9216,9216,9216,9216,9216,9216,9216,12288,12288,12288,12288,12288,12288,12288,12288,15360,15360,15360,15360,15360,15360,15360,15360,18432,18432,18432,18432,18432,18432,18432,18432 oldwid=2,3,4,5,6,7,8,8,9,10,11,12,13,14,15,16,17,18,19,20,21,0,0,0,24,25,26,27,28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 tilewidth=3072 tileheight=3072");
     (void)combined; // exception in parse if we have problems.
+
+    // Test parsing removing un-used pieces
+    std::string base = "tilecombine nviewid=0 part=0 width=256 height=256 tileposx=0,3840 tileposy=0,0 ";
+    struct {
+        std::string inp;
+        std::string outp;
+    } tests[] = {
+        { "imgsize=0,0 tilewidth=3840 tileheight=3840 ver=-1,-1",
+          "tilewidth=3840 tileheight=3840 ver=-1,-1" },
+        { "imgsize=1,0 tilewidth=3840 tileheight=3840 ver=-1,-1",
+          "imgsize=1,0 tilewidth=3840 tileheight=3840 ver=-1,-1" },
+        { "wid=0,0 tilewidth=3840 tileheight=3840 ver=-1,-1",
+          "tilewidth=3840 tileheight=3840 ver=-1,-1" },
+        { "tilewidth=3840 tileheight=3840 ver=-1,-1 wid=0,1",
+          "tilewidth=3840 tileheight=3840 ver=-1,-1 wid=0,1" },
+        { "oldwid=0,0 tilewidth=3840 tileheight=3840 ver=-1,-1",
+          "tilewidth=3840 tileheight=3840 ver=-1,-1" },
+        { "tilewidth=3840 tileheight=3840 ver=-1,-1 oldwid=0,1",
+          "tilewidth=3840 tileheight=3840 ver=-1,-1 oldwid=0,1" },
+    };
+    for (auto &s : tests)
+    {
+        combined = TileCombined::parse(base + s.inp);
+        LOK_ASSERT_EQUAL(combined.serialize("tilecombine"), base + s.outp);
+    }
 }
 
 void WhiteBoxTests::testTileData()
@@ -1059,30 +963,6 @@ void WhiteBoxTests::testBufferClass()
     LOK_ASSERT_EQUAL(true, buf.empty());
 }
 
-
-void WhiteBoxTests::testHexify()
-{
-    constexpr auto testname = __func__;
-
-    const std::string s1 = "some ascii text with !@#$%^&*()_+/-\\|";
-    const auto hex = Util::dataToHexString(s1, 0, s1.size());
-    std::string decoded;
-    LOK_ASSERT(Util::dataFromHexString(hex, decoded));
-    LOK_ASSERT_EQUAL(s1, decoded);
-
-    for (std::size_t randStrLen = 1; randStrLen < 129; ++randStrLen)
-    {
-        const auto s2 = Util::rng::getBytes(randStrLen);
-        LOK_ASSERT_EQUAL(randStrLen, s2.size());
-        const auto hex2 = Util::dataToHexString(s2, 0, s2.size());
-        LOK_ASSERT_EQUAL(randStrLen * 2, hex2.size());
-        std::vector<char> decoded2;
-        LOK_ASSERT(Util::dataFromHexString(hex2, decoded2));
-        LOK_ASSERT_EQUAL(randStrLen, decoded2.size());
-        LOK_ASSERT_EQUAL(Util::toString(s2), Util::toString(decoded2));
-    }
-}
-
 void WhiteBoxTests::testStat()
 {
     constexpr auto testname = __func__;
@@ -1146,14 +1026,6 @@ void WhiteBoxTests::testStringCompare()
     LOK_ASSERT(!Util::iequal("abc", "abcd"));
 
     LOK_ASSERT(!Util::iequal("abc", 3, "abcd", 4));
-
-    LOK_ASSERT(!Util::startsWith("abc", "abcd"));
-    LOK_ASSERT(Util::startsWith("abcd", "abc"));
-    LOK_ASSERT(Util::startsWith("abcd", "abcd"));
-
-    LOK_ASSERT(!Util::endsWith("abc", "abcd"));
-    LOK_ASSERT(Util::endsWith("abcd", "bcd"));
-    LOK_ASSERT(Util::endsWith("abcd", "abcd"));
 }
 
 void WhiteBoxTests::testParseUri()
@@ -1357,18 +1229,6 @@ void WhiteBoxTests::testSafeAtoi()
     }
 }
 
-void WhiteBoxTests::testBytesToHex()
-{
-    constexpr auto testname = __func__;
-
-    {
-        const std::string d("Some text");
-        const std::string hex = Util::bytesToHexString(d);
-        const std::string s = Util::hexStringToBytes(hex);
-        LOK_ASSERT_EQUAL(d, s);
-    }
-}
-
 void WhiteBoxTests::testJsonUtilEscapeJSONValue()
 {
     constexpr auto testname = __func__;
@@ -1376,18 +1236,6 @@ void WhiteBoxTests::testJsonUtilEscapeJSONValue()
     const std::string in = "domain\\username";
     const std::string expected = "domain\\\\username";
     LOK_ASSERT_EQUAL(JsonUtil::escapeJSONValue(in), expected);
-}
-
-void WhiteBoxTests::testUtf8()
-{
-#if ENABLE_DEBUG
-    constexpr auto testname = __func__;
-    LOK_ASSERT(Util::isValidUtf8("foo"));
-    LOK_ASSERT(Util::isValidUtf8("©")); // 2 char
-    LOK_ASSERT(Util::isValidUtf8("→ ")); // 3 char
-    LOK_ASSERT(Util::isValidUtf8("🏃 is not 🏊."));
-    LOK_ASSERT(!Util::isValidUtf8("\xff\x03"));
-#endif
 }
 
 void WhiteBoxTests::testFindInVector()
@@ -1410,6 +1258,45 @@ void WhiteBoxTests::testFindInVector()
     ret = Util::findInVector(v, "blah");
     expected = std::string::npos;
     LOK_ASSERT_EQUAL(expected, ret);
+}
+
+#if 0
+size_t WhiteBoxTests::waitForThreads(size_t count)
+{
+    auto start = std::chrono::steady_clock::now();
+    while (Util::getCurrentThreadCount() != count)
+    {
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start).count() >= 250)
+        {
+            std::cerr << "Failed to get correct thread count " << count <<
+                " instead we have " << Util::getCurrentThreadCount() << "\n";
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return Util::getCurrentThreadCount();
+}
+#endif
+
+void WhiteBoxTests::testThreadPool()
+{
+    constexpr auto testname = __func__;
+//    const size_t existingUnrelatedThreads = Util::getCurrentThreadCount();
+    // coverity[tainted_data_argument : FALSE] - we trust this variable in tests
+    setenv("MAX_CONCURRENCY","8",1);
+    ThreadPool pool;
+    LOK_ASSERT_EQUAL(int(8), pool._maxConcurrency);
+    LOK_ASSERT_EQUAL(size_t(7), pool._threads.size());
+//    LOK_ASSERT_EQUAL(size_t(7 + existingUnrelatedThreads), waitForThreads(8 + existingUnrelatedThreads));
+
+    pool.stop();
+    LOK_ASSERT_EQUAL(size_t(0), pool._threads.size());
+//    LOK_ASSERT_EQUAL(size_t(existingUnrelatedThreads), waitForThreads(existingUnrelatedThreads));
+
+    pool.start();
+    LOK_ASSERT_EQUAL(size_t(7), pool._threads.size());
+//    LOK_ASSERT_EQUAL(size_t(7 + existingUnrelatedThreads), waitForThreads(8 + existingUnrelatedThreads));
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(WhiteBoxTests);

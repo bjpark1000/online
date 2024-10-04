@@ -11,16 +11,12 @@
 
 // Compile and link this into test and utility executables that need it to link
 
+#include "config.h"
+
 #include <common/TraceEvent.hpp>
 
-void TraceEvent::emitOneRecordingIfEnabled(const std::string &recording)
-{
-    (void) recording;
-}
+void TraceEvent::emitOneRecordingIfEnabled([[maybe_unused]] const std::string& recording) {}
 
-void TraceEvent::emitOneRecording(const std::string &recording)
-{
-    (void) recording;
-}
+void TraceEvent::emitOneRecording([[maybe_unused]] const std::string& recording) {}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

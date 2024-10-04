@@ -1,19 +1,13 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 const desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop', 'tagproxy'], 'Focus tests', function() {
-	var origTestFileName = 'focus.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		helper.setupAndLoadDocument('writer/focus.odt');
 		desktopHelper.switchUIToCompact();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	it('Basic document focus.', function() {
@@ -79,5 +73,22 @@ describe(['tagdesktop', 'tagproxy'], 'Focus tests', function() {
 		helper.assertFocus('id','search-input');
 
 		cy.cGet('#search-input').should('have.prop', 'value', text);
+	});
+
+	it('Type in font change.', function () {
+		// Select everything
+		cy.cGet('body').type('{ctrl}a');
+
+		// Change font size by slow typing
+		cy.cGet('#fontsizecombobox > input.ui-combobox-content').click();
+		cy.cGet('#fontsizecombobox > input.ui-combobox-content').clear();
+		helper.assertFocus('tagName', 'INPUT');
+		helper.assertFocus('parentElement.id', 'fontsizecombobox');
+		var text = '999';
+		helper.typeText('body', text, 500);
+
+		// Font size combobox sould retain focus
+		helper.assertFocus('tagName', 'INPUT');
+		helper.assertFocus('parentElement.id', 'fontsizecombobox');
 	});
 });

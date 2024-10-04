@@ -69,6 +69,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.Charset;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -80,6 +81,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.libreoffice.androidlib.lok.LokClipboardData;
 import org.libreoffice.androidlib.lok.LokClipboardEntry;
 
@@ -415,7 +418,7 @@ public class LOActivity extends AppCompatActivity {
         Log.i(TAG, "onNewIntent");
 
         if (documentLoaded) {
-            postMobileMessageNative("save dontTerminateEdit=true dontSaveIfUnmodified=true");
+            postMobileMessageNative("save dontTerminateEdit=1 dontSaveIfUnmodified=1");
         }
 
         final Intent finalIntent = intent;
@@ -607,7 +610,7 @@ public class LOActivity extends AppCompatActivity {
     protected void onPause() {
         // A Save similar to an autosave
         if (documentLoaded)
-            postMobileMessageNative("save dontTerminateEdit=true dontSaveIfUnmodified=true");
+            postMobileMessageNative("save dontTerminateEdit=1 dontSaveIfUnmodified=1");
 
         super.onPause();
         Log.d(TAG, "onPause() - hinting to save, we might need to return to the doc");
@@ -739,7 +742,7 @@ public class LOActivity extends AppCompatActivity {
                         // This will actually change the doc permission to write
                         // It's a toggle for blue edit button, but also changes permission
                         // Toggle is achieved by calling setPermission('edit') in javascript
-                        callFakeWebsocketOnMessage("'mobile: readonlymode'");
+                        callFakeWebsocketOnMessage("mobile: readonlymode");
                         isDocEditable = true;
                     }
                     return;
@@ -812,10 +815,10 @@ public class LOActivity extends AppCompatActivity {
 
         if (mMobileWizardVisible) {
             // just return one level up in the mobile-wizard (or close it)
-            callFakeWebsocketOnMessage("'mobile: mobilewizardback'");
+            callFakeWebsocketOnMessage("mobile: mobilewizardback");
             return;
         } else if (mIsEditModeActive) {
-            callFakeWebsocketOnMessage("'mobile: readonlymode'");
+            callFakeWebsocketOnMessage("mobile: readonlymode");
             return;
         }
 
@@ -959,6 +962,17 @@ public class LOActivity extends AppCompatActivity {
      * Passing message the other way around - from Java to the FakeWebSocket in JS.
      */
     void callFakeWebsocketOnMessage(final String message) {
+        String base64Message = Base64.getEncoder().encodeToString(message.getBytes());
+
+        rawCallFakeWebsocketOnMessage("window.atob('" + base64Message + "')");
+    }
+
+    /**
+     * Similar to callFakeWebsocketOnMessage but 'message' is instead any expression evaluable as
+     * JavaScript. For example, you should use this to pass Base64ToArrayBuffer invocations to
+     * the fake websocket
+     */
+    void rawCallFakeWebsocketOnMessage(final String message) {
         // call from the UI thread
         if (mWebView != null)
             mWebView.post(new Runnable() {
@@ -982,28 +996,46 @@ public class LOActivity extends AppCompatActivity {
             });
 
         // update progress bar when loading
-        if (message.startsWith("'statusindicator") || message.startsWith("'error:")) {
+        if (message.startsWith("'progress")) {
             runOnUiThread(new Runnable() {
                 public void run() {
-                    // update progress bar if it exists
-                    final String statusIndicatorSetValue = "'statusindicatorsetvalue: ";
-                    if (message.startsWith(statusIndicatorSetValue)) {
-                        int start = statusIndicatorSetValue.length();
-                        int end = message.indexOf("'", start);
+                    JSONObject messageJSON;
+                    String messageID;
 
-                        int progress = 0;
-                        try {
-                            progress = Integer.parseInt(message.substring(start, end));
-                        } catch (Exception e) {
-                        }
-
-                        mProgressDialog.determinateProgress(progress);
+                    int jsonStart = message.indexOf("{");
+                    if (jsonStart == -1) {
+                        return;
                     }
-                    else if (message.startsWith("'statusindicatorfinish:") || message.startsWith("'error:")) {
+
+                    try {
+                        messageJSON = new JSONObject(message.substring(jsonStart));
+                        messageID = messageJSON.getString("id");
+                    } catch (JSONException e) {
+                        return;
+                    }
+
+                    if (messageID.equals("finish")) {
                         mProgressDialog.dismiss();
                         if (BuildConfig.GOOGLE_PLAY_ENABLED && rateAppController != null)
                             rateAppController.askUserForRating();
+                        return;
                     }
+
+                    try {
+                        String text = messageJSON.getString("text");
+                        mProgressDialog.mTextView.setText(text);
+                    } catch (JSONException ignored) {}
+
+                    try {
+                        int progress = messageJSON.getInt("value");
+                        mProgressDialog.determinateProgress(progress);
+                    } catch (JSONException ignored) {}
+                }
+            });
+        } else if (message.startsWith("'error:")) {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    mProgressDialog.dismiss();
                 }
             });
         }

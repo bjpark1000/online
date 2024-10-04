@@ -1,5 +1,6 @@
-/// <reference path="../../src/layer/tile/CanvasSectionContainer.ts" />
-/// <reference path="../../src/layer/tile/TilesSection.ts" />
+/// <reference path="../../src/canvas/CanvasSectionContainer.ts" />
+/// <reference path="../../src/canvas/CanvasSectionObject.ts" />
+/// <reference path="../../src/canvas/sections/TilesSection.ts" />
 
 function canvasDomString() {
     return `
@@ -15,10 +16,10 @@ function canvasDomString() {
 }
 
 function setupCanvasContainer(width: number, height: number): CanvasSectionContainer {
-    const canvas = <HTMLCanvasElement>document.getElementById('document-canvas');
+  const canvas = <HTMLCanvasElement>document.getElementById('document-canvas');
 
-    const sectionContainer = new CanvasSectionContainer(canvas, true /* disableDrawing? */);
-    sectionContainer.onResize(width, height); // Set canvas size.
+  const sectionContainer = new CanvasSectionContainer(canvas, true /* disableDrawing? */);
+  sectionContainer.onResize(width, height); // Set canvas size.
 
-    return sectionContainer;
+  return sectionContainer;
 }

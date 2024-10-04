@@ -11,53 +11,37 @@
 
 #pragma once
 
-#include <test/testlog.hpp>
+#include "Unit.hpp"
 #include <test/lokassert.hpp>
+#include <test/testlog.hpp>
+
+#include <Socket.hpp>
+#include <Common.hpp>
+#include <WebSocketSession.hpp>
+#include <common/ConfigUtil.hpp>
+#include <common/Util.hpp>
+#include <tools/COOLWebSocket.hpp>
+#include <wsd/TileDesc.hpp>
 
 #include <Poco/BinaryReader.h>
-#include <Poco/Dynamic/Var.h>
-#include <Poco/JSON/JSON.h>
-#include <Poco/JSON/Parser.h>
+#include <JsonUtil.hpp>
 #include <Poco/Net/HTTPClientSession.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/Net/HTTPSClientSession.h>
 #include <Poco/Net/NetException.h>
-#include <Poco/Net/StreamSocket.h>
-#include <Poco/Net/SecureStreamSocket.h>
-#include <Poco/Net/Socket.h>
 #include <Poco/Path.h>
 #include <Poco/URI.h>
 
-#include <Common.hpp>
-#include "Socket.hpp"
-#include "common/FileUtil.hpp"
-#include <tools/COOLWebSocket.hpp>
-#include <common/ConfigUtil.hpp>
-#include <common/Util.hpp>
-#include <net/WebSocketSession.hpp>
-#include <wsd/TileDesc.hpp>
-
-#include <iterator>
-#include <fstream>
-#include <string>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <thread>
 
 #ifndef TDOC
 #error TDOC must be defined (see Makefile.am)
-#endif
-
-#if HAVE_STD_FILESYSTEM
-# if HAVE_STD_FILESYSTEM_EXPERIMENTAL
-#  include <experimental/filesystem>
-namespace filesystem = ::std::experimental::filesystem;
-# else
-#  include <filesystem>
-namespace filesystem = ::std::filesystem;
-# endif
-#else
-# include <Poco/TemporaryFile.h>
 #endif
 
 // Sometimes we need to retry some commands as they can (due to timing or load) soft-fail.
@@ -128,7 +112,6 @@ std::vector<char> readDataFromFile(std::unique_ptr<std::fstream>& file)
 
 namespace
 {
-#if HAVE_STD_FILESYSTEM
 /// Class to delete files when the process ends.
 class FileDeleter
 {
@@ -140,7 +123,7 @@ public:
     {
         std::unique_lock<std::mutex> guard(_lock);
         for (const std::string& file: _filesToDelete)
-            filesystem::remove(file);
+            std::filesystem::remove(file);
     }
 
     void registerForDeletion(const std::string& file)
@@ -149,7 +132,6 @@ public:
         _filesToDelete.push_back(file);
     }
 };
-#endif
 }
 
 /// Make a temp copy of a file, and prepend it with a prefix.
@@ -157,7 +139,6 @@ public:
 inline std::string getTempFileCopyPath(const std::string& srcDir, const std::string& srcFilename, const std::string& dstFilenamePrefix)
 {
     const std::string srcPath = srcDir + '/' + srcFilename;
-#if HAVE_STD_FILESYSTEM
     std::string dstPath;
 
     bool retry;
@@ -165,9 +146,9 @@ inline std::string getTempFileCopyPath(const std::string& srcDir, const std::str
         std::string dstFilename = dstFilenamePrefix + Util::encodeId(Util::rng::getNext()) + '_' + srcFilename;
 
         retry = false;
-        dstPath = filesystem::temp_directory_path() / dstFilename;
+        dstPath = std::filesystem::temp_directory_path() / dstFilename;
         try {
-            filesystem::copy(srcPath, dstPath);
+            std::filesystem::copy(srcPath, dstPath);
         }
         catch (const std::exception& ex)
         {
@@ -178,12 +159,6 @@ inline std::string getTempFileCopyPath(const std::string& srcDir, const std::str
 
     static FileDeleter fileDeleter;
     fileDeleter.registerForDeletion(dstPath);
-#else
-    const std::string dstFilename = dstFilenamePrefix + Util::encodeId(Util::rng::getNext()) + '_' + srcFilename;
-    const std::string dstPath = Poco::Path(Poco::Path::temp(), dstFilename).toString();
-    copyFileTo(srcPath, dstPath);
-    Poco::TemporaryFile::registerForDeletion(dstPath);
-#endif
 
     return dstPath;
 }
@@ -202,8 +177,6 @@ inline void getDocumentPathAndURL(const std::string& docFilename, std::string& d
 {
     const std::string testname = prefix;
 
-    static std::mutex lock;
-    std::unique_lock<std::mutex> guard(lock);
 
     std::replace(prefix.begin(), prefix.end(), ' ', '_');
     documentPath = getTempFileCopyPath(TDOC, docFilename, prefix);
@@ -322,17 +295,6 @@ pocoGet(bool secure, const std::string& host, const int port, const std::string&
     return pocoGet(uri);
 }
 
-inline std::shared_ptr<Poco::Net::StreamSocket> createRawSocket()
-{
-    return
-#if ENABLE_SSL
-        std::make_shared<Poco::Net::SecureStreamSocket>
-#else
-        std::make_shared<Poco::Net::StreamSocket>
-#endif
-        (Poco::Net::SocketAddress("127.0.0.1", ClientPortNumber));
-}
-
 // Sets read / write timeout for the given file descriptor.
 inline void setSocketTimeOut(int socketFD, int timeMS)
 {
@@ -398,10 +360,10 @@ inline bool haveSsl()
 }
 
 /// Return a fully-qualified URI, with schema, to the test loopback server.
-inline std::string const& getTestServerURI()
+inline std::string const& getTestServerURI(std::string proto = "http")
 {
     static std::string serverURI(
-        (haveSsl() && config::isSslEnabled() ? "https://127.0.0.1:" : "http://127.0.0.1:")
+        (haveSsl() && config::isSslEnabled() ? proto + "s://127.0.0.1:" : proto + "://127.0.0.1:")
         + std::to_string(ClientPortNumber));
 
     return serverURI;
@@ -558,17 +520,48 @@ std::string assertNotInResponse(T& ws, const std::string& prefix, const std::str
     return res;
 }
 
+inline bool getProgressWithIdValue(const std::string &msg, const std::string &idValue)
+{
+    const std::string prefix = "progress:";
+    if (!COOLProtocol::matchPrefix(prefix, msg))
+        return false;
+
+    Poco::JSON::Object::Ptr obj;
+    if (!JsonUtil::parseJSON(msg, obj))
+        return false;
+
+    std::string jsonId = JsonUtil::getJSONValue<std::string>(obj, "id");
+    return jsonId == idValue;
+}
+
 inline bool isDocumentLoaded(
     const std::shared_ptr<http::WebSocketSession>& ws, const std::string& testname,
     bool isView = true,
     const std::chrono::milliseconds timeout = std::chrono::seconds(COMMAND_TIMEOUT_SECS * 4))
 {
-    const std::string prefix = isView ? "status:" : "statusindicatorfinish:";
-    const std::string message = getResponseString(ws, prefix, testname, timeout);
+    bool success = false;
 
-    const bool success = COOLProtocol::matchPrefix(prefix, message);
-    if (!success)
-        TST_LOG("ERROR: Timed out loading document. Did not get [" << prefix << "] in time.");
+    if (isView) // 2nd connection - someone else did the load
+    {
+        const std::string message = getResponseString(ws, "status:", testname, timeout);
+        success = COOLProtocol::matchPrefix("status:", message);
+    }
+    else
+    {
+        const std::string prefix = "progress:";
+        while (true)
+        {
+            const std::string message = getResponseString(ws, prefix, testname, timeout);
+            if (!COOLProtocol::matchPrefix(prefix, message))
+                break; // timeout
+            if (getProgressWithIdValue(message, "finish"))
+            {
+                success = true;
+                break;
+            }
+        }
+    }
+
     return success;
 }
 
@@ -596,11 +589,11 @@ connectLOKit(const std::shared_ptr<SocketPoll>& socketPoll, const Poco::URI& uri
             http::Request req(url);
             ws->asyncRequest(req, socketPoll);
 
-            const char* expected_response = "statusindicator: find";
-
-            TST_LOG("Connected to " << uri.toString() << ", waiting for response ["
-                                    << expected_response << "]");
-            if (getResponseString(ws, expected_response, testname) == expected_response)
+            TST_LOG("Connected to " << uri.toString() << ", waiting for progress: id:find response");
+            std::string msg;
+            if (!(msg = getResponseString(ws, "progress:", testname)).empty() &&
+                COOLProtocol::matchPrefix("progress:", msg) &&
+                getProgressWithIdValue(msg, "find"))
             {
                 return ws;
             }
@@ -608,6 +601,12 @@ connectLOKit(const std::shared_ptr<SocketPoll>& socketPoll, const Poco::URI& uri
             if (SigUtil::getShutdownRequestFlag())
             {
                 TST_LOG("Shutdown requested, giving up connectLOKit");
+                break;
+            }
+
+            if (UnitBase::get().isFinished())
+            {
+                TST_LOG("The test has finished, giving up connectLOKit");
                 break;
             }
 

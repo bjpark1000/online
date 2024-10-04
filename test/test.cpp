@@ -9,16 +9,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <chrono>
-#include <string>
+#include <config.h>
+
 #define TST_LOG_REDIRECT
 #include <test.hpp>
 
-#include <config.h>
-
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
-#include <memory>
+#include <string>
 
 #include <cppunit/BriefTestProgressListener.h>
 #include <cppunit/CompilerOutputter.h>
@@ -37,16 +36,11 @@
 
 #include <helpers.hpp>
 #include <Unit.hpp>
-#include <wsd/COOLWSD.hpp>
 #if ENABLE_SSL
 #include <Ssl.hpp>
 #include <SslSocket.hpp>
 #endif
 #include <Log.hpp>
-
-#include "common/Protocol.hpp"
-
-class HTTPGetTest;
 
 bool filterTests(CPPUNIT_NS::TestRunner& runner, CPPUNIT_NS::Test* testRegistry, const std::string& testName)
 {
@@ -292,29 +286,5 @@ bool runClientTests(const char* cmd, bool standalone, bool verbose)
 
     return result.wasSuccessful();
 }
-
-// Standalone tests don't really use WSD
-#ifndef STANDALONE_CPPUNIT
-
-std::set<pid_t> getKitPids()
-{
-    return COOLWSD::getKitPids();
-}
-
-/// Get the PID of the forkit
-std::set<pid_t> getForKitPids()
-{
-    std::set<pid_t> pids;
-    if (COOLWSD::ForKitProcId >= 0)
-        pids.emplace(COOLWSD::ForKitProcId);
-    return pids;
-}
-
-/// How many live coolkit processes do we have ?
-int getCoolKitProcessCount()
-{
-    return getKitPids().size();
-}
-#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,21 +1,15 @@
-/* global describe it cy beforeEach Cypress require afterEach expect */
+/* global describe it cy beforeEach Cypress require expect */
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
 var mode = Cypress.env('USER_INTERFACE');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', function() {
-	var origTestFileName = 'table_operation.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		helper.setupAndLoadDocument('writer/table_operation.odt');
 		desktopHelper.switchUIToNotebookbar();
 		desktopHelper.selectZoomLevel('70');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function selectFullTable() {
@@ -23,11 +17,13 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 
 		helper.typeIntoDocument('{ctrl}{a}');
 
+		helper.copy();
 		cy.cGet('#copy-paste-container table').should('exist');
 	}
 
 	it('Insert row before.', function() {
-		helper.clickOnIdle('#insert .unoInsertRowsBefore');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#insert .unoInsertRowsBefore').click();
 		cy.cGet('.leaflet-marker-icon.table-row-resize-marker').should('have.length', 4);
 
 		selectFullTable();
@@ -43,7 +39,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Insert row after.', function() {
-		helper.clickOnIdle('#insert .unoInsertRowsAfter');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#insert .unoInsertRowsAfter').click();
 		cy.cGet('.leaflet-marker-icon.table-row-resize-marker').should('have.length', 4);
 
 		selectFullTable();
@@ -59,8 +56,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Insert column before.', function() {
+		helper.setDummyClipboardForCopy();
 
-		helper.clickOnIdle('#insert .unoInsertColumnsBefore');
+		cy.cGet('#insert .unoInsertColumnsBefore').click();
 
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 4);
 
@@ -78,7 +76,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Insert column after.', function() {
-		helper.clickOnIdle('#insert .unoInsertColumnsAfter');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#insert .unoInsertColumnsAfter').click();
 
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 4);
 
@@ -95,7 +94,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Delete row.', function() {
-		helper.clickOnIdle('#delete .unoDeleteRows');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#delete .unoDeleteRows').click();
 
 		cy.cGet('.leaflet-marker-icon.table-row-resize-marker').should('have.length', 2);
 
@@ -113,22 +113,23 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 
 	it('Delete column.', function() {
 		// Insert column first
-		helper.clickOnIdle('#insert .unoInsertColumnsBefore');
+		cy.cGet('#insert .unoInsertColumnsBefore').click();
 
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 4);
 
 		// Then delete it
-		helper.clickOnIdle('#delete .unoDeleteColumns');
+		cy.cGet('#delete .unoDeleteColumns').click();
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 3);
 	});
 
 	it('Delete table.', function() {
-		helper.clickOnIdle('#delete .unoDeleteTable');
+		cy.cGet('#delete .unoDeleteTable').click();
 
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('not.exist');
 	});
 
 	it('Merge cells.', function() {
+		helper.setDummyClipboardForCopy();
 		// Select 2x2 part of the table.
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
@@ -140,7 +141,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 		// With merging two rows, the cursor is moved into the first row.
 		cy.get('@origCursorPos')
 			.then(function(origCursorPos) {
-				helper.clickOnIdle('#split_merge .unoMergeCells button');
+
+				cy.cGet('#split_merge .unoMergeCells').should('not.have.attr', 'disabled');
+				cy.cGet('#split_merge .unoMergeCells').click();
 
 				cy.cGet('.blinking-cursor')
 					.should(function(cursor) {
@@ -177,13 +180,15 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Set minimal row height.', function() {
+		helper.setDummyClipboardForCopy();
 
 		// Select full table (3x2)
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
 
-		helper.clickOnIdle('#rowsizing .unoSetMinimalRowHeight');
+		cy.cGet('#rowsizing .unoSetOptimalRowHeight').click();
+		cy.cGet('#rowsizing .unoSetMinimalRowHeight').click();
 
 		selectFullTable();
 
@@ -192,11 +197,14 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Set optimal row height.', function() {
+		helper.setDummyClipboardForCopy();
 		// Select full table (3x2)
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
-		helper.clickOnIdle('#rowsizing .unoSetOptimalRowHeight button');
+
+		cy.cGet('#rowsizing .unoSetOptimalRowHeight').should('not.have.attr','disabled');
+		cy.cGet('#rowsizing .unoSetOptimalRowHeight').click();
 		selectFullTable();
 
 		// Check new row height
@@ -213,12 +221,14 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Distribute rows.', function() {
+		helper.setDummyClipboardForCopy();
 		// Select full table (3x2)
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
 
-		helper.clickOnIdle('#rowsizing .unoDistributeRows button');
+		cy.cGet('#rowsizing .unoDistributeRows').should('not.have.attr','disabled');
+		cy.cGet('#rowsizing .unoDistributeRows').click();
 
 		selectFullTable();
 
@@ -236,12 +246,13 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Set minimal column width.', function() {
+		helper.setDummyClipboardForCopy();
 		// Select full table (3x2)
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
 
-		helper.clickOnIdle('#columnsizing .unoSetMinimalColumnWidth');
+		cy.cGet('#columnsizing .unoSetMinimalColumnWidth').click();
 
 		selectFullTable();
 
@@ -249,12 +260,13 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Set optimal column width.', function() {
+		helper.setDummyClipboardForCopy();
 		// Select full table (3x2)
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
 
-		helper.clickOnIdle('#columnsizing .unoSetOptimalColumnWidth');
+		cy.cGet('#columnsizing .unoSetOptimalColumnWidth').click();
 
 		selectFullTable();
 
@@ -263,12 +275,13 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Distribute columns.', function() {
+		helper.setDummyClipboardForCopy();
 		// Select full table (3x2)
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
 
-		helper.clickOnIdle('#columnsizing .unoDistributeColumns');
+		cy.cGet('#columnsizing .unoDistributeColumns').click();
 
 		selectFullTable();
 
@@ -276,9 +289,11 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 	});
 
 	it('Split Cells', function() {
+		helper.setDummyClipboardForCopy();
 		helper.typeIntoDocument('{downarrow}');
 
 		helper.typeIntoDocument('{ctrl}{a}');
+		helper.copy();
 
 		helper.waitUntilIdle('#copy-paste-container');
 
@@ -292,6 +307,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', functio
 		cy.cGet('#ok.ui-pushbutton.jsdialog').click();
 
 		helper.typeIntoDocument('{ctrl}{a}');
+		helper.copy();
 
 		helper.waitUntilIdle('#copy-paste-container');
 

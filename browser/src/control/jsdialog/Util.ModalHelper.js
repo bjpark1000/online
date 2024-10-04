@@ -66,18 +66,11 @@ function enableButtonInModal(id, buttonId, enable) {
 
 // check if user already set 'do not show again' option for a modal
 function shouldShowAgain(id) {
-	var showAgain = true;
-	if (window.isLocalStorageAllowed) {
-		var state = localStorage.getItem('UIShowAgain_' + id);
-		if (state === 'false')
-			showAgain = false;
-	}
-	return showAgain;
+    return window.prefs.getBoolean(`UIShowAgain_${id}`, true);
 }
 
 function setShowAgain(id, state) {
-	if (window.isLocalStorageAllowed)
-		localStorage.setItem('UIShowAgain_' + id, !state ? 'false' : 'true');
+    window.prefs.set(`UIShowAgain_${id}`, !state);
 }
 
 // helper to avoid using long list of optional parameters
@@ -87,8 +80,8 @@ function showInfoModalWithOptions(id, options) {
 		var message1 = options.messages.length ? options.messages[0] : undefined;
 		var message2 = options.messages.length > 1 ? options.messages[1] : undefined;
 		//TODO: handle dynamic number of options.messages
-		var buttonText = options.buttons.length ? options.buttons[0].text : undefined;
-		var callback = options.buttons.length ? options.buttons[0].callback : undefined;
+		var buttonText = options.buttons && options.buttons.length ? options.buttons[0].text : undefined;
+		var callback = options.buttons && options.buttons.length ? options.buttons[0].callback : undefined;
 		//TODO: handle dynamic number of buttons with callback
 		var withCancel = options.withCancel;
 		var focusId = options.focusId;

@@ -95,6 +95,39 @@ L.LOUtil = {
 		return rectangles;
 	},
 
+	// Some items will only present in dark mode so we will not check errors for those in other mode
+	onlydarkModeItems : ['invertbackground'],
+
+	// Common images used in all modes, so the default one will be used.
+	commonItems: ['serverauditok', 'serverauditerror'],
+
+	// Helper function to strip '.svg' suffix and 'lc_' prefix
+	stripName: function(name) {
+		// Remove the '.svg' suffix
+		var strippedName = name.replace(/\.svg$/, '');
+
+		// Remove the 'lc_' prefix if it exists
+		if (strippedName.startsWith('lc_')) {
+			strippedName = strippedName.substring(3);
+		}
+
+		return strippedName;
+	},
+
+	isDarkModeItem: function(name) {
+		var strippedName = this.stripName(name);
+		
+		// Check if the stripped name is in the onlydarkModeItems array
+		return this.onlydarkModeItems.includes(strippedName);
+	},
+
+	isCommonForAllMode: function(name) {
+		var strippedName = this.stripName(name);
+
+		// Check if the stripped name is in the commonItems array
+		return this.commonItems.includes(strippedName);
+	},
+
 	/// unwind things to get a good absolute URL
 	getURL: function(path) {
 		if (path === '')
@@ -110,37 +143,80 @@ L.LOUtil = {
 	},
 	setImage: function(img, name, map) {
 		var setupIcon = function () {
-			var docType = map.getDocType();
-			img.src = this.getImageURL(name, docType);
+			img.src = this.getImageURL(name);
 			this.checkIfImageExists(img);
 		}.bind(this);
 		setupIcon();
 
 		map.on('themechanged', setupIcon, this);
 	},
-	getImageURL: function(imgName, docType) {
-		var defaultImageURL = this.getURL('images/' + imgName);
-		if (window.isLocalStorageAllowed) {
-			var state = localStorage.getItem('UIDefaults_' + docType + '_darkTheme');
-			if ((state && (/true/).test(state.toLowerCase())) || (state === null &&  window.uiDefaults['darkTheme'])) {
-				return this.getURL('images/dark/' + imgName);
-			}
+	setUserImage: function(img, map, viewId) {
+		// set avatar image if it exist in user extract info
+		var defaultImage = L.LOUtil.getImageURL('user.svg');
+		var viewInfo = map._viewInfo[viewId];
+		if (
+			viewInfo !== undefined
+			&& viewInfo.userextrainfo !== undefined
+			&& viewInfo.userextrainfo.avatar !== undefined
+		) {
+			// set user avatar
+			img.src = viewInfo.userextrainfo.avatar;
+			// Track if error event is already bound to this image
+			img.addEventListener('error', function () {
+				img.src = defaultImage;
+				this.checkIfImageExists(img, true);
+			}.bind(this), {once:true});
+			return;
 		}
+		img.src = defaultImage;
+		this.checkIfImageExists(img, true);
+	},
+
+	getImageURL: function(imgName) {
+		var defaultImageURL = this.getURL('images/' + imgName);
+	
+		// Check if the image name is in the commonItems list and return the normal image path
+		if (this.isCommonForAllMode(imgName)) {
+			return defaultImageURL;
+		}
+	
+		if (window.prefs.getBoolean('darkTheme')) {
+			return this.getURL('images/dark/' + imgName);
+		}
+	
+		var dummyEmptyImg = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+		defaultImageURL = this.isDarkModeItem(imgName) ? dummyEmptyImg : defaultImageURL;
 		return defaultImageURL;
 	},
-	checkIfImageExists : function(imageElement) {
-		imageElement.addEventListener('error', function() {
-			if (imageElement.src && imageElement.src.includes('images/branding/dark')) {
-				imageElement.src = imageElement.src.replace('images/branding/dark', 'images/dark');
+
+	checkIfImageExists: function (imageElement, imageIsLayoutCritical) {
+		imageElement.addEventListener('error', function (e) {
+			if (e.loUtilProcessed) {
 				return;
 			}
-			if (imageElement.src && (imageElement.src.includes('images/dark')|| imageElement.src.includes('images/branding'))) {
-				imageElement.src = imageElement.src.replace('images/dark', 'images');
-				imageElement.src = imageElement.src.replace('images/branding', 'images');
+
+			if (imageElement.src && imageElement.src.includes('/images/branding/dark/')) {
+				imageElement.src = imageElement.src.replace('/images/branding/dark/', '/images/dark/');
+				e.loUtilProcessed = true;
 				return;
 			}
+			if (imageElement.src && (imageElement.src.includes('/images/dark/') || imageElement.src.includes('/images/branding/'))) {
+				imageElement.src = imageElement.src.replace('/images/dark/', '/images/');
+				imageElement.src = imageElement.src.replace('/images/branding/', '/images/');
+				e.loUtilProcessed = true;
+				return;
+			}
+
+			if (imageIsLayoutCritical) {
+                imageElement.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+                // We cannot set visibility: hidden because that would hide other attributes of the image, e.g. its border
+				e.loUtilProcessed = true;
+                return;
+			}
+
 			imageElement.style.display = 'none';
-			});
+			e.loUtilProcessed = true;
+		});
 	},
 	/// oldFileName = Example.odt, suffix = new
 	/// returns: Example_new.odt
@@ -152,6 +228,10 @@ L.LOUtil = {
 	commandWithoutIcon: [
 		'InsertPageHeader',
 		'InsertPageFooter',
+		'FLD_COL_NUMBER',
+		'MTR_FLD_COL_SPACING',
+		'rows',
+		'cols',
 		'None'
 	],
 
@@ -237,5 +317,12 @@ L.LOUtil = {
 	isFileODF: function (map) {
 		var ext = this.getFileExtension(map);
 		return ext === 'odt' || ext === 'ods' || ext === 'odp' || ext == 'odg';
+	},
+
+	containsDOMRect: function (viewRect, rect) {
+		return (rect.top >= viewRect.top &&
+			rect.right <= viewRect.right &&
+			rect.bottom <= viewRect.bottom &&
+			rect.left >= viewRect.left)
 	}
 };

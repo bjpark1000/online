@@ -1,22 +1,17 @@
-/* global describe it cy require expect afterEach */
+/* global describe it cy require expect */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var writerHelper = require('../../common/writer_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / layout via mobile wizard.', function() {
-	var testFileName = '';
 
-	function before(testFile) {
-		testFileName = helper.beforeAll(testFile, 'writer');
+	function before(filePath) {
+		helper.setupAndLoadDocument(filePath);
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
 	}
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
 
 	function openTablePanel() {
 		mobileHelper.openMobileWizard();
@@ -29,14 +24,17 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	}
 
 	function selectFullTable() {
-		helper.clickOnIdle('.unoSelectTable');
+		cy.cGet('.unoSelectTable').click();
+		cy.cGet('#split_merge .unoMergeCells').should('not.have.attr', 'disabled');
+		helper.copy();
 		cy.cGet('#copy-paste-container table').should('exist');
 	}
 
 	it('Insert row before.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		helper.clickOnIdle('.unoInsertRowsBefore');
+		cy.cGet('.unoInsertRowsBefore').click();
 		cy.cGet('.leaflet-marker-icon.table-row-resize-marker').should('have.length', 4);
 		selectFullTable();
 		// Check rows / columns
@@ -51,9 +49,10 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Insert row after.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		helper.clickOnIdle('.unoInsertRowsAfter');
+		cy.cGet('.unoInsertRowsAfter').click();
 		cy.cGet('.leaflet-marker-icon.table-row-resize-marker').should('have.length', 4);
 		selectFullTable();
 		// Check rows / columns
@@ -68,9 +67,10 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Insert column before.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		helper.clickOnIdle('.unoInsertColumnsBefore');
+		cy.cGet('.unoInsertColumnsBefore').click();
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 4);
 		selectFullTable();
 		// Check rows / columns
@@ -84,9 +84,10 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Insert column after.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		helper.clickOnIdle('.unoInsertColumnsAfter');
+		cy.cGet('.unoInsertColumnsAfter').click();
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 4);
 		selectFullTable();
 		// Check rows / columns
@@ -100,9 +101,10 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Delete row.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		helper.clickOnIdle('.unoDeleteRows');
+		cy.cGet('.unoDeleteRows').click();
 		cy.cGet('.leaflet-marker-icon.table-row-resize-marker').should('have.length', 2);
 
 		selectFullTable();
@@ -118,41 +120,42 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Delete column.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
 		// Insert column first
 		openTablePanel();
-		helper.clickOnIdle('.unoInsertColumnsBefore');
+		cy.cGet('.unoInsertColumnsBefore').click();
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 4);
 		// Then delete it
 		mobileHelper.closeMobileWizard();
 		openTablePanel();
-		helper.clickOnIdle('.unoDeleteColumns');
+		cy.cGet('.unoDeleteColumns').click();
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('have.length', 3);
 	});
 
 	it('Delete table.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
 		openTablePanel();
-		helper.clickOnIdle('.unoDeleteTable');
+		cy.cGet('.unoDeleteTable').click();
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('not.exist');
 		mobileHelper.closeMobileWizard();
 		writerHelper.selectAllTextOfDoc();
 		// Check markers are in the same row (we have text selection only)
-		cy.cGet('.leaflet-marker-icon').should(function(markers) {
+		cy.cGet('.html-object-section').should(function(markers) {
 				expect(markers).to.have.lengthOf(2);
 				expect(markers[0].getBoundingClientRect().top).to.equal(markers[1].getBoundingClientRect().top);
 			});
 	});
 
 	it('Merge cells.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		// Select 2x2 part of the table.
 		helper.moveCursor('down', 'shift');
 		helper.moveCursor('right', 'shift');
 		// We use cursor position as the indicator of layout change.
 		helper.getCursorPos('top', 'origCursorPos');
 		openTablePanel();
-		helper.clickOnIdle('.unoMergeCells');
+		cy.cGet('#mobile-wizard .unoMergeCells').click();
 		// Cursor was in the second row originally.
 		// With merging two rows, the cursor is moved into the first row.
 		cy.get('@origCursorPos')
@@ -171,9 +174,9 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Change row height.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		cy.wait(500);
 		cy.cGet('#rowheight .spinfield').should('have.value', '0');
 		helper.typeIntoInputField('#rowheight .spinfield', '1.4', true, false);
 		selectFullTable();
@@ -182,9 +185,10 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Change column width.', function() {
-		before('table_properties.odt');
+		before('writer/table_properties.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		cy.wait(500);
+		cy.cGet('#columnwidth .spinfield').should('have.value', '1.42');
 		helper.typeIntoInputField('#columnwidth .spinfield', '1.6', true, false);
 		selectFullTable();
 		// Check column width
@@ -192,29 +196,30 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Set minimal row height.', function() {
-		before('table_with_text.odt');
-		// Select full table (3x2)
-		helper.moveCursor('down', 'shift');
-		helper.moveCursor('down', 'shift');
-		helper.moveCursor('right', 'shift');
+		before('writer/table_with_text.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
-		helper.clickOnIdle('.unoSetMinimalRowHeight');
-		helper.moveCursor('up', 'shift');
-		helper.moveCursor('up', 'shift');
-		helper.moveCursor('left', 'shift');
+		selectFullTable();
+		// Check old row height
+		cy.cGet('#copy-paste-container td').first().should('have.attr', 'height');
+
+		cy.cGet('#mobile-wizard .unoSetMinimalRowHeight').click();
+		// Table still selected
+		helper.copy();
 		// Check new row height
 		cy.cGet('#copy-paste-container td').should('not.have.attr', 'height');
 	});
 
 	it('Set optimal row height.', function() {
-		before('table_with_text.odt');
+		before('writer/table_with_text.odt');
+		helper.setDummyClipboardForCopy();
 		openTablePanel();
 		selectFullTable();
 		cy.cGet('#copy-paste-container tr:nth-of-type(1) td:nth-of-type(1)').should('have.attr', 'height', '33');
 		cy.cGet('#copy-paste-container tr:nth-of-type(2) td:nth-of-type(1)').should('not.have.attr', 'height');
 		cy.cGet('#copy-paste-container tr:nth-of-type(3) td:nth-of-type(1)').should('not.have.attr', 'height');
 
-		helper.clickOnIdle('.unoSetOptimalRowHeight');
+		cy.cGet('#mobile-wizard .unoSetOptimalRowHeight').click();
 		selectFullTable();
 
 		cy.cGet('#copy-paste-container table td').should('have.length', 6);
@@ -223,13 +228,15 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Distribute rows.', function() {
-		before('table_with_text.odt');
+		before('writer/table_with_text.odt');
+		helper.setDummyClipboardForCopy();
 
 		// Select full table (3x2)
 		openTablePanel();
 		selectFullTable();
 
-		helper.clickOnIdle('.unoDistributeRows button');
+		cy.cGet('#mobile-wizard .unoDistributeRows').should('not.have.attr','disabled');
+		cy.cGet('#mobile-wizard .unoDistributeRows').click();
 
 		selectFullTable();
 
@@ -249,13 +256,15 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Set minimal column width.', function() {
-		before('table_with_text.odt');
+		before('writer/table_with_text.odt');
+		helper.setDummyClipboardForCopy();
 
 		// Select full table (3x2)
 		openTablePanel();
 		selectFullTable();
 
-		helper.clickOnIdle('.unoSetMinimalColumnWidth');
+		cy.cGet('#mobile-wizard .unoSetMinimalColumnWidth').should('not.have.attr','disabled');
+		cy.cGet('#mobile-wizard .unoSetMinimalColumnWidth').click();
 
 		selectFullTable();
 
@@ -263,29 +272,33 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Change table properties / l
 	});
 
 	it('Set optimal column width.', function() {
-		before('table_with_text.odt');
+		before('writer/table_with_text.odt');
+		helper.setDummyClipboardForCopy();
 
 		// Select full table (3x2)
 		openTablePanel();
 		selectFullTable();
 
-		helper.clickOnIdle('.unoEntireRow');
+		cy.cGet('#mobile-wizard .unoEntireRow').should('not.have.attr','disabled');
+		cy.cGet('#mobile-wizard .unoEntireRow').click();
 
 		cy.cGet('#copy-paste-container table').should('exist');
-		helper.clickOnIdle('.unoSetOptimalColumnWidth');
+		cy.cGet('.unoSetOptimalColumnWidth').click();
 		selectFullTable();
 		cy.cGet('#copy-paste-container td:nth-of-type(1n)').should('have.attr', 'width', '324');
 		cy.cGet('#copy-paste-container td:nth-of-type(2n)').should('have.attr', 'width', '323');
 	});
 
 	it('Distribute columns.', function() {
-		before('table_with_text.odt');
+		before('writer/table_with_text.odt');
+		helper.setDummyClipboardForCopy();
 
 		// Select full table (3x2)
 		openTablePanel();
 		selectFullTable();
 
-		helper.clickOnIdle('.unoDistributeColumns button');
+		cy.cGet('#mobile-wizard .unoDistributeColumns').should('not.have.attr','disabled');
+		cy.cGet('#mobile-wizard .unoDistributeColumns').click();
 
 		selectFullTable();
 

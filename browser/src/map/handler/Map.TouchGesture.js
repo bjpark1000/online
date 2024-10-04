@@ -7,7 +7,7 @@ L.Map.mergeOptions({
 	touchGesture: true,
 });
 
-/* global Hammer app $ */
+/* global Hammer app $ GraphicSelection */
 L.Map.TouchGesture = L.Handler.extend({
 	statics: {
 		MAP: 1,
@@ -109,8 +109,8 @@ L.Map.TouchGesture = L.Handler.extend({
 		this._hammer.on('pinchend', window.memo.bind(window.touch.touchOnly(this._onPinchEnd), this));
 		this._hammer.on('tripletap', window.memo.bind(window.touch.touchOnly(this._onTripleTap), this));
 		this._hammer.on('swipe', window.memo.bind(window.touch.touchOnly(this._onSwipe), this));
-		this._map.on('updatepermission', this._onPermission, this);
-		this._onPermission({perm: this._map._permission});
+		app.events.on('updatepermission', this._onPermission.bind(this));
+		this._onPermission({ detail: { perm: this._map._permission } });
 	},
 
 	removeHooks: function () {
@@ -126,11 +126,10 @@ L.Map.TouchGesture = L.Handler.extend({
 		this._hammer.off('press', window.memo.bind(window.touch.touchOnly(this._onPress), this));
 		this._hammer.off('tripletap', window.memo.bind(window.touch.touchOnly(this._onTripleTap), this));
 		this._hammer.off('swipe', window.memo.bind(window.touch.touchOnly(this._onSwipe), this));
-		this._map.off('updatepermission', this._onPermission, this);
 	},
 
 	_onPermission: function (e) {
-		if (e.perm == 'edit') {
+		if (e.detail.perm == 'edit') {
 			this._hammer.on('doubletap', window.memo.bind(window.touch.touchOnly(this._onDoubleTap), this));
 			this._hammer.on('press', window.memo.bind(window.touch.touchOnly(this._onPress), this));
 		} else {
@@ -169,20 +168,12 @@ L.Map.TouchGesture = L.Handler.extend({
 			    latlng = this._map.layerPointToLatLng(layerPoint),
 			funcWizardRangeBounds = getFuncWizRangeBounds(this);
 
-			if (this._map._docLayer._graphicMarker) {
-				this._marker = this._map._docLayer._graphicMarker.transform.getMarker(layerPoint);
-			}
+			let twipsPoint = this._map._docLayer._latLngToTwips(latlng);
+			twipsPoint = new app.definitions.simplePoint(twipsPoint.x, twipsPoint.y);
 
-			if (this._marker) {
-				this._state = L.Map.TouchGesture.MARKER;
-			} else if (this._map._docLayer._graphicMarker && this._map._docLayer._graphicMarker.getBounds().contains(latlng)) {
-				if (this._map._docLayer.hasTableSelection())
-					this._state = L.Map.TouchGesture.TABLE;
-				else
-					this._state = L.Map.TouchGesture.GRAPHIC;
-			} else if (this._map._docLayer._cellCursor && this._map._docLayer._cellCursor.contains(latlng)) {
+			if (app.calc.cellCursorVisible && app.calc.cellCursorRectangle.containsPoint(twipsPoint.toArray())) {
 				this._state = L.Map.TouchGesture.CURSOR;
-			} else if (this._map._docLayer._cellCursor && funcWizardRangeBounds && funcWizardRangeBounds.contains(latlng)) {
+			} else if (app.calc.cellCursorVisible && funcWizardRangeBounds && funcWizardRangeBounds.contains(latlng)) {
 				this._state = L.Map.TouchGesture.CURSOR;
 			} else {
 				this._state = L.Map.TouchGesture.MAP;
@@ -192,7 +183,6 @@ L.Map.TouchGesture = L.Handler.extend({
 
 		if (e.isLast && this._state !== L.Map.TouchGesture.MAP) {
 			this._state = L.Map.TouchGesture.hitTest.MAP;
-			this._marker = undefined;
 			this._moving = false;
 		}
 
@@ -220,6 +210,8 @@ L.Map.TouchGesture = L.Handler.extend({
 		    latlng = this._map.layerPointToLatLng(layerPoint),
 		    mousePos = this._map._docLayer._latLngToTwips(latlng);
 
+		let posInTwips = new app.definitions.simplePoint(mousePos.x, mousePos.y);
+
 		if (this._moving) {
 			return;
 		}
@@ -246,11 +238,10 @@ L.Map.TouchGesture = L.Handler.extend({
 
 		var waitForSelectionMsg = function () {
 			// check new selection if any
-			var graphicSelection = docLayer._graphicSelection;
-			var cellCursor = docLayer._cellCursor;
+			var graphicSelection = GraphicSelection.rectangle;
 			if (!docLayer._cursorAtMispelledWord
-				&& (!graphicSelection || !graphicSelection.contains(latlng))
-				&& (!cellCursor || !cellCursor.contains(latlng))) {
+				&& (!graphicSelection || !graphicSelection.containsPoint(posInTwips.toArray()))
+				&& (!app.calc.cellCursorVisible || !app.calc.cellCursorRectangle.containsPoint(posInTwips.toArray()))) {
 				// try to select text
 				doubleClick();
 			}
@@ -269,18 +260,20 @@ L.Map.TouchGesture = L.Handler.extend({
 		// before checking if we received a possible selection message; if no such message is received
 		// we simulate a double click for trying to select text and finally, in any case,
 		// we trigger the context menu by sending a right click
-		var graphicSelection = docLayer._graphicSelection;
-		var cellCursor = docLayer._cellCursor;
+		var graphicSelection = GraphicSelection.rectangle;
 		var bContainsSel = false;
-		if (cellCursor)
+		if (app.calc.cellCursorVisible)
 			bContainsSel = docLayer.containsSelection(latlng);
 		var textSelection;
-		if (docLayer._textSelectionStart && docLayer._textSelectionEnd)
-			textSelection = new L.LatLngBounds(docLayer._textSelectionStart.getSouthWest(), docLayer._textSelectionEnd.getNorthEast());
+		if (docLayer._selectionHandles.start.rectangle && docLayer._selectionHandles.end.rectangle) {
+			// Oversimplication. See "inBand" function.
+			textSelection = new app.definitions.simpleRectangle(0, docLayer._selectionHandles.end.rectangle.y1, app.file.size.twips[0], 0);
+			textSelection.height = docLayer._selectionHandles.end.rectangle.y2 - docLayer._selectionHandles.start.rectangle.y1;
+		}
 
-		if ((textSelection && textSelection.inBand(latlng))
-			|| (graphicSelection && graphicSelection.contains(latlng))
-			|| (cellCursor && cellCursor.contains(latlng)) || bContainsSel) {
+		if ((textSelection && textSelection.containsPoint(posInTwips.toArray()))
+			|| (graphicSelection && graphicSelection.containsPoint(posInTwips.toArray()))
+			|| (app.calc.cellCursorVisible && app.calc.cellCursorRectangle.containsPoint(posInTwips.toArray())) || bContainsSel) {
 			// long touched an already selected object
 			// send right click to trigger context menus
 			this._map._contextMenu._onMouseDown({originalEvent: e.srcEvent});
@@ -319,21 +312,7 @@ L.Map.TouchGesture = L.Handler.extend({
 		    latlng = this._map.layerPointToLatLng(layerPoint),
 		    mousePos = this._map._docLayer._latLngToTwips(latlng);
 
-		// clicked a hyperlink popup - not really designed for this.
-		if (this._map.hyperlinkPopup && e.target) {
-			var tapOnHyperlinkPopup = false;
-			this._map.hyperlinkPopup._htmlContent.childNodes.forEach(function(childNode) {
-				if (childNode == e.target.parentNode || childNode == e.target) {
-					tapOnHyperlinkPopup = true;
-					return;
-				}
-			});
-			// not forward mouse events to core if the user tap on a hyperlink popup box
-			// for instance on Writer that causes the text cursor to be moved
-			if (tapOnHyperlinkPopup) {
-				return;
-			}
-		}
+		let posInTwips = new app.definitions.simplePoint(mousePos.x, mousePos.y);
 
 		this._map.fire('closemobilewizard');
 
@@ -365,15 +344,14 @@ L.Map.TouchGesture = L.Handler.extend({
 		var acceptInput = false; // No keyboard by default.
 		var sendMouseEvents = true; // By default, this is a single-click.
 		if (docLayer) {
-			if (docLayer.hasGraphicSelection()) {
+			if (GraphicSelection.hasActiveSelection()) {
 				// Need keyboard when cursor is visible.
-				acceptInput = this._map._docLayer.isCursorVisible();
+				acceptInput = app.file.textCursor.visible;
 			} else if (docLayer._docType === 'text') {
 				acceptInput = true; // Always show the keyboard in Writer on tap.
 			} else if (docLayer._docType === 'spreadsheet') {
 				// If the tap is in the current cell, start editing.
-				var cellCursor = docLayer._cellCursor;
-				acceptInput = (cellCursor && cellCursor.contains(latlng));
+				acceptInput = (app.calc.cellCursorVisible && app.calc.cellCursorRectangle.containsPoint(posInTwips.toArray()));
 				if (acceptInput) {
 					// Enter cell-edit mode on second tap of a selected cell.
 					if (this._map.isEditMode()) {
@@ -409,7 +387,7 @@ L.Map.TouchGesture = L.Handler.extend({
 
 		var docLayer = this._map._docLayer;
 		if (docLayer) {
-			if (docLayer._docType === 'spreadsheet' && !docLayer.hasGraphicSelection()) {
+			if (docLayer._docType === 'spreadsheet' && !GraphicSelection.hasActiveSelection()) {
 				// Enter cell-edit mode on double-taping a cell.
 				if (this._map.isEditMode()) {
 					docLayer.postKeyboardEvent('input', 0, 769); // F2
@@ -420,7 +398,7 @@ L.Map.TouchGesture = L.Handler.extend({
 			}
 
 			// Show keyboard when no graphic selection, or  cursor is visible.
-			var acceptInput = !docLayer.hasGraphicSelection() || docLayer.isCursorVisible();
+			var acceptInput = !GraphicSelection.hasActiveSelection() || app.file.textCursor.visible;
 
 			if (navigator.platform === 'iPhone' && docLayer._docType === 'presentation')
 				acceptInput = true;
@@ -457,43 +435,36 @@ L.Map.TouchGesture = L.Handler.extend({
 		    latlng = this._map.layerPointToLatLng(layerPoint),
 		    mousePos = this._map._docLayer._latLngToTwips(latlng);
 
-		var originalCellCursor = this._map._docLayer._cellCursor;
-		var increaseRatio = 0.40;
-		var increasedCellCursor = null;
-		if (originalCellCursor) {
-			increasedCellCursor = originalCellCursor.padVertically(increaseRatio);
+		let posInTwips = new app.definitions.simplePoint(mousePos.x, mousePos.y);
+
+		let increaseRatio = 0.40;
+		let increasedCellCursor = null;
+		if (app.calc.cellCursorVisible) {
+			increasedCellCursor = app.calc.cellCursorRectangle.clone();
+			increasedCellCursor.y1 -= increasedCellCursor.height * increaseRatio;
+			increasedCellCursor.y2 += increasedCellCursor.height * increaseRatio;
 		}
 
-		if (increasedCellCursor && increasedCellCursor.contains(latlng)) {
-			if (!originalCellCursor.contains(latlng)) {
-				var lat = latlng.lat;
-				var lng = latlng.lng;
+		if (increasedCellCursor && increasedCellCursor.containsPoint(posInTwips.toArray())) {
+			if (!app.calc.cellCursorRectangle.containsPoint(posInTwips.toArray())) {
+				let y = posInTwips.y;
+				let x = posInTwips.x;
 
-				var sw = originalCellCursor._southWest,
-				ne = originalCellCursor._northEast;
-				var heightBuffer = Math.abs(sw.lat - ne.lat) * increaseRatio;
+				let heightBuffer = Math.abs(app.calc.cellCursorRectangle.pHeight) * increaseRatio;
 
-				if (lat < originalCellCursor.getSouthWest().lat) {
-					lat = lat + heightBuffer;
+				if (y < app.calc.cellCursorRectangle.y2) {
+					y = y + heightBuffer;
 				}
 
-				if (lat > originalCellCursor.getNorthEast().lat) {
-					lat = lat - heightBuffer;
+				if (y > app.calc.cellCursorRectangle.y1) {
+					y = y - heightBuffer;
 				}
 
-				latlng = new L.LatLng(lat, lng);
-				mousePos = this._map._docLayer._latLngToTwips(latlng);
+				mousePos = new L.Point(x, y);
 			}
 		}
 
-		if (this._state === L.Map.TouchGesture.MARKER) {
-			this._map._fireDOMEvent(this._marker, point, 'mousedown');
-		} else if (this._state === L.Map.TouchGesture.TABLE) {
-			this._map._docLayer._postMouseEvent('buttondown', mousePos.x, mousePos.y, 1, 1, 0);
-		} else if (this._state === L.Map.TouchGesture.GRAPHIC) {
-			var mouseEvent = this._map._docLayer._createNewMouseEvent('mousedown', point);
-			this._map._docLayer._graphicMarker._onDragStart(mouseEvent);
-		} else if (this._state === L.Map.TouchGesture.CURSOR) {
+		if (this._state === L.Map.TouchGesture.CURSOR) {
 			this._map._docLayer._postMouseEvent('buttondown', mousePos.x, mousePos.y, 1, 1, 0);
 		} else {
 			this._map.dragging._draggable._onDown(this._constructFakeEvent(point, 'mousedown'));
@@ -516,22 +487,11 @@ L.Map.TouchGesture = L.Handler.extend({
 		}
 
 		var point = e.pointers[0],
-		    containerPoint = this._map.mouseEventToContainerPoint(point),
-		    layerPoint = this._map.containerPointToLayerPoint(containerPoint),
-		    latlng = this._map.layerPointToLatLng(layerPoint),
-		    mousePos = this._map._docLayer._latLngToTwips(latlng);
-
-		if (this._state === L.Map.TouchGesture.MARKER) {
-			this._map._fireDOMEvent(this._map, point, 'mousemove');
-			this._moving = true;
-		} else if (this._state === L.Map.TouchGesture.GRAPHIC) {
-			var mouseEvent = this._map._docLayer._createNewMouseEvent('mousemove', point);
-			this._map._docLayer._graphicMarker._onDrag(mouseEvent);
-			this._moving = true;
-		} else if (this._state === L.Map.TouchGesture.TABLE) {
-			this._map._docLayer._postMouseEvent('move', mousePos.x, mousePos.y, 1, 1, 0);
-			this._moving = true;
-		} else if (this._state === L.Map.TouchGesture.CURSOR) {
+			containerPoint = this._map.mouseEventToContainerPoint(point),
+			layerPoint = this._map.containerPointToLayerPoint(containerPoint),
+			latlng = this._map.layerPointToLatLng(layerPoint),
+			mousePos = this._map._docLayer._latLngToTwips(latlng);
+		if (this._state === L.Map.TouchGesture.CURSOR) {
 			this._map._docLayer._postMouseEvent('move', mousePos.x, mousePos.y, 1, 1, 0);
 		} else if (this._map.scrollingIsHandled === false) {
 			this._map.dragging._draggable._onMove(this._constructFakeEvent(point, 'mousemove'));
@@ -551,17 +511,7 @@ L.Map.TouchGesture = L.Handler.extend({
 		    latlng = this._map.layerPointToLatLng(layerPoint),
 		    mousePos = this._map._docLayer._latLngToTwips(latlng);
 
-		if (this._state === L.Map.TouchGesture.MARKER) {
-			this._map._fireDOMEvent(this._map, point, 'mouseup');
-			this._moving = false;
-		} else if (this._state === L.Map.TouchGesture.GRAPHIC) {
-			var mouseEvent = this._map._docLayer._createNewMouseEvent('mouseup', point);
-			this._map._docLayer._graphicMarker._onDragEnd(mouseEvent);
-			this._moving = false;
-		} else if (this._state === L.Map.TouchGesture.TABLE) {
-			this._map._docLayer._postMouseEvent('buttonup', mousePos.x, mousePos.y, 1, 1, 0);
-			this._moving = false;
-		} else if (this._state === L.Map.TouchGesture.CURSOR) {
+		if (this._state === L.Map.TouchGesture.CURSOR) {
 			this._map._docLayer._postMouseEvent('buttonup', mousePos.x, mousePos.y, 1, 1, 0);
 		} else {
 			this._map.dragging._draggable._onUp(this._constructFakeEvent(point, 'mouseup'));
@@ -578,14 +528,14 @@ L.Map.TouchGesture = L.Handler.extend({
 
 		if (this._inSwipeAction) {
 			this._cancelAutoscrollRAF();
-			return;
 		}
 
 		if (isNaN(e.center.x) || isNaN(e.center.y))
 			return;
 
-		this._pinchStartCenter = {x: e.center.x, y: e.center.y};
-		this._map._docLayer.preZoomAnimation();
+		this._pinchStartCenter = { x: e.center.x, y: e.center.y };
+		const _pinchStartLatLng = this._map.mouseEventToLatLng({ clientX: e.center.x, clientY: e.center.y });
+		this._map._docLayer.preZoomAnimation(_pinchStartLatLng);
 	},
 
 	_onPinch: function (e) {
@@ -599,11 +549,8 @@ L.Map.TouchGesture = L.Handler.extend({
 		var offset = {x: e.center.x - this._pinchStartCenter.x, y: e.center.y - this._pinchStartCenter.y};
 		var center = {x: this._pinchStartCenter.x - offset.x, y: this._pinchStartCenter.y - offset.y};
 		this._zoom = this._map._limitZoom(this._map.getScaleZoom(e.scale));
-		this._center = this._map._limitCenter(this._map.mouseEventToLatLng({clientX: center.x, clientY: center.y}),
-						      this._zoom, this._map.options.maxBounds);
+		this._origCenter = this._map.mouseEventToLatLng({clientX: center.x, clientY: center.y});
 
-		this._origCenter = this._map._limitCenter(this._map.mouseEventToLatLng({clientX: center.x, clientY: center.y}),
-							  this._map.getZoom(), this._map.options.maxBounds);
 
 		if (this._map._docLayer.zoomStep) {
 			this._map._docLayer.zoomStep(this._zoom, this._origCenter);
@@ -627,7 +574,7 @@ L.Map.TouchGesture = L.Handler.extend({
 			var thisObj = this;
 			this._map._docLayer.zoomStepEnd(finalZoom, this._origCenter,
 				function (newMapCenter) { // mapUpdater
-					thisObj._map.setView(newMapCenter || thisObj._center, finalZoom);
+					thisObj._map.setView(newMapCenter, finalZoom);
 				},
 				// showMarkers
 				function () {
@@ -665,11 +612,16 @@ L.Map.TouchGesture = L.Handler.extend({
 		if (this._map.uiManager.isUIBlocked())
 			return;
 
+		if (window.IgnorePanning)
+			return;
+
+		let velocityX = this._map._docLayer.isCalcRTL() ? -e.velocityX : e.velocityX;
+		let pointVelocity = new L.Point(velocityX, e.velocityY);
 		if (this._inSwipeAction) {
-			this._velocity = this._velocity.add(new L.Point(e.velocityX, e.velocityY));
+			this._velocity = this._velocity.add(pointVelocity);
 		}
 		else {
-			this._velocity = new L.Point(e.velocityX, e.velocityY);
+			this._velocity = pointVelocity;
 		}
 		this._amplitude = this._velocity.multiplyBy(32);
 		this._newPos = L.DomUtil.getPosition(this._map._mapPane);

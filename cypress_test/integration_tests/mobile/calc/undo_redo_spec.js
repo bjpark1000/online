@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
@@ -6,17 +6,12 @@ var calcHelper = require('../../common/calc_helper');
 var repairHelper = require('../../common/repair_document_helper');
 
 describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', function() {
-	var testFileName = 'undo_redo.ods';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'calc');
+		helper.setupAndLoadDocument('calc/undo_redo.ods');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function undo() {
@@ -26,12 +21,12 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', f
 
 		helper.typeIntoDocument('Hello World');
 
-		cy.cGet('#tb_actionbar_item_acceptformula').click();
+		cy.cGet('#toolbar-up #acceptformula').click();
 
 		//if we don't wait tests in CLI is failing
 		cy.wait(3000);
 
-		cy.cGet('#tb_actionbar_item_undo').click();
+		cy.cGet('#toolbar-up #undo').click();
 
 		calcHelper.dblClickOnFirstCell();
 
@@ -39,7 +34,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', f
 
 		helper.textSelectionShouldNotExist();
 
-		cy.cGet('#tb_actionbar_item_acceptformula').click();
+		cy.cGet('#toolbar-up #acceptformula').click();
 	}
 
 	it('Undo', function() {
@@ -51,7 +46,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', f
 
 		cy.wait(3000);
 
-		cy.cGet('#tb_actionbar_item_redo').click();
+		cy.cGet('#toolbar-up #redo').click();
 
 		calcHelper.dblClickOnFirstCell();
 
@@ -67,7 +62,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', f
 
 		cy.wait(3000);
 
-		cy.cGet('#tb_actionbar_item_acceptformula').click();
+		cy.cGet('#toolbar-up #acceptformula').click();
 
 		calcHelper.dblClickOnFirstCell();
 
@@ -77,7 +72,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Editing Operations', f
 
 		cy.wait(3000);
 
-		cy.cGet('#tb_actionbar_item_acceptformula').click();
+		cy.cGet('#toolbar-up #acceptformula').click();
 
 		repairHelper.rollbackPastChange('Undo', undefined, true);
 

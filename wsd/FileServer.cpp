@@ -12,6 +12,48 @@
 #include <config.h>
 #include <config_version.h>
 
+#include "FileServer.hpp"
+
+#include "Auth.hpp"
+#include "COOLWSD.hpp"
+#include "Exceptions.hpp"
+#include "FileUtil.hpp"
+#include "HttpRequest.hpp"
+#include "RequestDetails.hpp"
+#include "ServerURL.hpp"
+#include <Common.hpp>
+#include <Crypto.hpp>
+#include <Log.hpp>
+#include <Protocol.hpp>
+#include <Util.hpp>
+#include <JsonUtil.hpp>
+#include <common/ConfigUtil.hpp>
+#include <common/LangUtil.hpp>
+#if !MOBILEAPP
+#include <net/HttpHelper.hpp>
+#endif
+#include <ContentSecurityPolicy.hpp>
+
+#include <Poco/DateTime.h>
+#include <Poco/DateTimeFormat.h>
+#include <Poco/DateTimeFormatter.h>
+#include <Poco/Exception.h>
+#include <Poco/FileStream.h>
+#include <Poco/MemoryStream.h>
+#include <Poco/Net/HTMLForm.h>
+#include <Poco/Net/HTTPBasicCredentials.h>
+#include <Poco/Net/HTTPCookie.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPResponse.h>
+#include <Poco/Net/NameValueCollection.h>
+#include <Poco/Net/NetException.h>
+#include <Poco/RegularExpression.h>
+#include <Poco/Runnable.h>
+#include <Poco/SHA1Engine.h>
+#include <Poco/StreamCopier.h>
+#include <Poco/URI.h>
+#include <Poco/Util/LayeredConfiguration.h>
+
 #include <chrono>
 #include <iomanip>
 #include <string>
@@ -23,56 +65,23 @@
 #include <zlib.h>
 #include <security/pam_appl.h>
 
+#include <wasm/base64.hpp>
+
 #include <openssl/evp.h>
 
-#include <Poco/DateTime.h>
-#include <Poco/DateTimeFormat.h>
-#include <Poco/DateTimeFormatter.h>
-#include <Poco/Exception.h>
-#include <Poco/FileStream.h>
-#include <Poco/SHA1Engine.h>
-#include <Poco/Net/HTMLForm.h>
-#include <Poco/Net/HTTPBasicCredentials.h>
-#include <Poco/Net/HTTPCookie.h>
-#include <Poco/Net/HTTPRequest.h>
-#include <Poco/Net/HTTPResponse.h>
-#include <Poco/Net/NameValueCollection.h>
-#include <Poco/Net/NetException.h>
-#include <Poco/RegularExpression.h>
-#include <Poco/Runnable.h>
-#include <Poco/StreamCopier.h>
-#include <Poco/URI.h>
-#include <Poco/JSON/Object.h>
-#include "Exceptions.hpp"
-
-#include "Auth.hpp"
-#include <Common.hpp>
-#include <Crypto.hpp>
-#include "FileServer.hpp"
-#include "COOLWSD.hpp"
-#include "FileUtil.hpp"
-#include "RequestDetails.hpp"
-#include "ServerURL.hpp"
-#include <Log.hpp>
-#include <Protocol.hpp>
-#include <Util.hpp>
-#include <common/ConfigUtil.hpp>
-#include <common/LangUtil.hpp>
-#if !MOBILEAPP
-#include <net/HttpHelper.hpp>
-#endif
-#include <ContentSecurityPolicy.hpp>
-
 using Poco::Net::HTMLForm;
-using Poco::Net::HTTPBasicCredentials;
 using Poco::Net::HTTPRequest;
-using Poco::Net::HTTPResponse;
 using Poco::Net::NameValueCollection;
 using Poco::Util::Application;
 
 std::map<std::string, std::pair<std::string, std::string>> FileServerRequestHandler::FileHash;
 
-namespace {
+// We have files that are at least 2.5 MB already.
+// WASM files are in the order of 30 MB, however,
+constexpr auto MaxFileSizeToCacheInBytes = 50 * 1024 * 1024;
+
+namespace
+{
 
 int functionConversation(int /*num_msg*/, const struct pam_message** /*msg*/,
                          struct pam_response **reply, void *appdata_ptr)
@@ -204,7 +213,13 @@ bool isConfigAuthOk(const std::string& userProvidedUsr, const std::string& userP
     return pass == userProvidedPwd;
 }
 
+std::string stringifyBoolFromConfig(const Poco::Util::LayeredConfiguration& config,
+                                    const std::string& propertyName, bool defaultValue)
+{
+    return config.getBool(propertyName, defaultValue) ? "true" : "false";
 }
+
+} // namespace
 
 FileServerRequestHandler::FileServerRequestHandler(const std::string& root)
 {
@@ -226,18 +241,16 @@ FileServerRequestHandler::~FileServerRequestHandler()
     FileHash.clear();
 }
 
-bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request,
-                                               HTTPResponse &response)
+bool FileServerRequestHandler::isAdminLoggedIn(const Poco::Net::HTTPRequest& request,
+                                               std::string& jwtToken)
 {
     assert(COOLWSD::AdminEnabled);
 
-    const auto& config = Application::instance().config();
-
-    NameValueCollection cookies;
-    request.getCookies(cookies);
     try
     {
-        const std::string jwtToken = cookies.get("jwt");
+        NameValueCollection cookies;
+        request.getCookies(cookies);
+        jwtToken = cookies.get("jwt");
         LOG_INF("Verifying JWT token: " << jwtToken);
         JWTAuth authAgent("admin", "admin", "admin");
         if (authAgent.verify(jwtToken))
@@ -253,8 +266,14 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request,
         LOG_INF("No existing JWT cookie found");
     }
 
-    // If no cookie found, or is invalid, let the admin re-login
-    HTTPBasicCredentials credentials(request);
+    return false;
+}
+
+bool FileServerRequestHandler::authenticateAdmin(const Poco::Net::HTTPBasicCredentials& credentials,
+                                                 http::Response& response, std::string& jwtToken)
+{
+    assert(COOLWSD::AdminEnabled);
+
     const std::string& userProvidedUsr = credentials.getUsername();
     const std::string& userProvidedPwd = credentials.getPassword();
 
@@ -268,7 +287,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request,
     }
 
     // Check if the user is allowed to use the admin console
-    if (config.getBool("admin_console.enable_pam", false))
+    if (COOLWSD::getConfigValue<bool>("admin_console.enable_pam", false))
     {
         // use PAM - it needs the username too
         if (!isPamAuthOk(userProvidedUsr, userProvidedPwd))
@@ -283,33 +302,22 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request,
 
     // authentication passed, generate and set the cookie
     JWTAuth authAgent("admin", "admin", "admin");
-    const std::string jwtToken = authAgent.getAccessToken();
+    jwtToken = authAgent.getAccessToken();
 
     Poco::Net::HTTPCookie cookie("jwt", jwtToken);
     // bundlify appears to add an extra /dist -> dist/dist/admin
     cookie.setPath(COOLWSD::ServiceRoot + "/browser/dist/");
     cookie.setSecure(COOLWSD::isSSLEnabled());
-    response.addCookie(cookie);
+    response.header().addCookie(cookie.toString());
 
     return true;
 }
 
 bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http::Response& response)
 {
-    // For now, we reuse the exiting implementation, which uses Poco HTTPCookie.
-    Poco::Net::HTTPResponse pocoResponse;
-    if (isAdminLoggedIn(request, pocoResponse))
-    {
-        // Copy the headers, including the cookies.
-        for (const auto& pair : pocoResponse)
-        {
-            response.set(pair.first, pair.second);
-        }
-
-        return true;
-    }
-
-    return false;
+    std::string jwtToken;
+    return isAdminLoggedIn(request, jwtToken) ||
+           authenticateAdmin(Poco::Net::HTTPBasicCredentials(request), response, jwtToken);
 }
 
 #if ENABLE_DEBUG
@@ -381,7 +389,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
         const std::string prefix = "/wopi/files";
         const std::string suffix = "/contents";
         std::string localPath;
-        if (Util::endsWith(path.toString(), suffix))
+        if (path.toString().ends_with(suffix))
         {
             localPath = path.toString().substr(prefix.length(), path.toString().length() - prefix.length() - suffix.length());
         }
@@ -396,7 +404,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
             throw BadRequestException("Invalid URI: " + localPath);
         }
 
-        if (request.getMethod() == "GET" && !Util::endsWith(path.toString(), suffix))
+        if (request.getMethod() == "GET" && !path.toString().ends_with(suffix))
         {
             std::shared_ptr<LocalFileInfo> localFile =
                 LocalFileInfo::getOrCreateFile(localPath, path.getFileName());
@@ -415,7 +423,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
             fileInfo->set("OwnerId", "test");
             fileInfo->set("UserId", userId);
             fileInfo->set("UserFriendlyName", userNameString);
-            fileInfo->set("UserCanWrite", "true");
+            fileInfo->set("UserCanWrite", (requestDetails.getParam("permission") != "readonly") ? "true": "false");
             fileInfo->set("PostMessageOrigin", postMessageOrigin);
             fileInfo->set("LastModifiedTime", localFile->getLastModifiedTime());
             fileInfo->set("EnableOwnerTermination", "true");
@@ -424,13 +432,14 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
             fileInfo->stringify(jsonStream);
 
             http::Response httpResponse(http::StatusCode::OK);
+            FileServerRequestHandler::hstsHeaders(httpResponse);
             httpResponse.set("Last-Modified", Util::getHttpTime(localFile->fileLastModifiedTime));
             httpResponse.setBody(jsonStream.str(), "application/json; charset=utf-8");
             socket->send(httpResponse);
 
             return;
         }
-        else if(request.getMethod() == "GET" && Util::endsWith(path.toString(), suffix))
+        else if(request.getMethod() == "GET" && path.toString().ends_with(suffix))
         {
             std::shared_ptr<LocalFileInfo> localFile =
                 LocalFileInfo::getOrCreateFile(localPath,path.getFileName());
@@ -439,12 +448,13 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
             ss << inputFile.rdbuf();
 
             http::Response httpResponse(http::StatusCode::OK);
+            FileServerRequestHandler::hstsHeaders(httpResponse);
             httpResponse.set("Last-Modified", Util::getHttpTime(localFile->fileLastModifiedTime));
             httpResponse.setBody(ss.str(), "text/plain; charset=utf-8");
             socket->send(httpResponse);
             return;
         }
-        else if (request.getMethod() == "POST" && Util::endsWith(path.toString(), suffix))
+        else if (request.getMethod() == "POST" && path.toString().ends_with(suffix))
         {
             std::shared_ptr<LocalFileInfo> localFile =
                 LocalFileInfo::getOrCreateFile(localPath,path.getFileName());
@@ -483,6 +493,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
             const std::string body = "{\"LastModifiedTime\": \"" +
                 localFile->getLastModifiedTime() + "\" }";
             http::Response httpResponse(http::StatusCode::OK);
+            FileServerRequestHandler::hstsHeaders(httpResponse);
             httpResponse.setBody(body, "application/json; charset=utf-8");
             socket->send(httpResponse);
             return;
@@ -491,9 +502,10 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
 #endif
 
 void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
-                                             const RequestDetails &requestDetails,
+                                             const RequestDetails& requestDetails,
                                              Poco::MemoryInputStream& message,
-                                             const std::shared_ptr<StreamSocket>& socket)
+                                             const std::shared_ptr<StreamSocket>& socket,
+                                             ResourceAccessDetails& accessDetails)
 {
     try
     {
@@ -502,27 +514,18 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
         noCache = !COOLWSD::ForceCaching; // for cypress
 #endif
         http::Response response(http::StatusCode::OK);
+        if( requestDetails.closeConnection() )
+            response.header().setConnectionToken(http::Header::ConnectionToken::Close);
+        hstsHeaders(response);
 
         const auto& config = Application::instance().config();
-
-        // HSTS hardening. Disabled in debug builds.
-#if !ENABLE_DEBUG
-        if (COOLWSD::isSSLEnabled() || COOLWSD::isSSLTermination())
-        {
-            if (config.getBool("ssl.sts.enabled", false))
-            {
-                const auto maxAge = config.getInt("ssl.sts.max_age", 31536000); // Default 1 year.
-                response.add("Strict-Transport-Security",
-                             "max-age=" + std::to_string(maxAge) + "; includeSubDomains");
-            }
-        }
-#endif
 
         Poco::URI requestUri(request.getURI());
         LOG_TRC("Fileserver request: " << requestUri.toString());
         requestUri.normalize(); // avoid .'s and ..'s
 
-        if (requestUri.getPath().find("browser/" COOLWSD_VERSION_HASH "/") == std::string::npos)
+        if (requestUri.getPath().find("browser/" COOLWSD_VERSION_HASH "/") == std::string::npos &&
+            requestUri.getPath().find("admin/") == std::string::npos)
         {
             LOG_WRN("Client - server version mismatch, disabling browser cache. "
                     "Expected: " COOLWSD_VERSION_HASH "; Actual URI path with version hash: "
@@ -542,7 +545,7 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
             config.getString("ver_suffix", "") + "\"";
 
 #if ENABLE_DEBUG
-        if (Util::startsWith(relPath, std::string("/wopi/files"))) {
+        if (relPath.starts_with("/wopi/files")) {
             handleWopiRequest(request, requestDetails, message, socket);
             return;
         }
@@ -563,6 +566,7 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
                     LOG_ERR(message.rdbuf());
 
                     http::Response httpResponse(http::StatusCode::OK);
+                    FileServerRequestHandler::hstsHeaders(httpResponse);
                     socket->send(httpResponse);
                     return;
                 }
@@ -572,11 +576,14 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
         // Is this a file we read at startup - if not; it's not for serving.
         if (FileHash.find(relPath) == FileHash.end() &&
             FileHash.find(relPath + ".br") == FileHash.end())
-            throw Poco::FileNotFoundException("Invalid URI request: [" + requestUri.toString() + "].");
+        {
+            throw Poco::FileNotFoundException("Invalid URI request (hash): [" +
+                                              requestUri.toString() + "].");
+        }
 
         if (endPoint == "welcome.html")
         {
-            preprocessWelcomeFile(request, requestDetails, message, socket);
+            preprocessWelcomeFile(request, response, requestDetails, message, socket);
             return;
         }
 
@@ -587,7 +594,7 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
             endPoint == "uno-localizations.json" ||
             endPoint == "uno-localizations-override.json")
         {
-            preprocessFile(request, requestDetails, message, socket);
+            accessDetails = preprocessFile(request, response, requestDetails, message, socket);
             return;
         }
 
@@ -598,7 +605,7 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
                 endPoint == "adminLog.html" || endPoint == "adminClusterOverview.html" ||
                 endPoint == "adminClusterOverviewAbout.html")
             {
-                preprocessAdminFile(request, requestDetails, socket);
+                preprocessAdminFile(request, response, requestDetails, socket);
                 return;
             }
 
@@ -644,7 +651,7 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
             else
                 mimeType = "text/plain";
 
-            response.setContentType(mimeType);
+            response.setContentType(std::move(mimeType));
 
             auto it = request.find("If-None-Match");
             if (it != request.end())
@@ -665,9 +672,6 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
                     return;
                 }
             }
-
-            response.set("Server", HTTP_SERVER_STRING);
-            response.set("Date", Util::getHttpTimeNow());
 
 #if !MOBILEAPP
             if (COOLWSD::WASMState != COOLWSD::WASMActivationState::Disabled &&
@@ -693,7 +697,7 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
                     response.set("Content-Encoding", "br");
                 }
 
-                HttpHelper::sendFileAndShutdown(socket, filePath, response, noCache);
+                HttpHelper::sendFile(socket, filePath, response, noCache);
                 return;
             }
 #endif
@@ -715,6 +719,8 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
             else
                 content = getUncompressedFile(relPath);
 
+            response.add("Content-Length", std::to_string(content->size()));
+
             if (!noCache)
             {
                 // 60 * 60 * 24 * 128 (days) = 11059200
@@ -728,7 +734,6 @@ void FileServerRequestHandler::handleRequest(const HTTPRequest& request,
 
             socket->send(response);
             socket->send(*content);
-            // shutdown by caller
         }
     }
     catch (const Poco::Net::NotAuthenticatedException& exc)
@@ -770,15 +775,14 @@ void FileServerRequestHandler::sendError(http::StatusCode errorCode,
     if (!shortMessage.empty())
     {
         const Poco::URI requestUri(request.getURI());
-        const std::string pathSanitized =
-            Util::encodeURIComponent(requestUri.getPath(), std::string());
+        const std::string pathSanitized = Uri::encode(requestUri.getPath(), std::string());
         // Let's keep message as plain text to avoid complications.
         headers += "Content-Type: text/plain charset=UTF-8\r\n";
         body = "Error: " + shortMessage + '\n' +
             longMessage + ' ' + pathSanitized + '\n' +
             "Please contact your system administrator.";
     }
-    HttpHelper::sendError(errorCode, socket, body, headers);
+    HttpHelper::sendErrorAndShutdown(errorCode, socket, body, headers);
 }
 
 void FileServerRequestHandler::readDirToHash(const std::string &basePath, const std::string &path, const std::string &prefix)
@@ -823,34 +827,55 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
         if (S_ISDIR(fileStat.st_mode))
             readDirToHash(basePath, relPath);
 
-        else if (S_ISREG(fileStat.st_mode) && Util::endsWith(relPath, ".br"))
+        else if (S_ISREG(fileStat.st_mode) && relPath.ends_with(".br"))
         {
             // Only cache without compressing.
             fileCount++;
             filesRead.append(currentFile->d_name);
             filesRead += ' ';
 
-            std::ifstream file(basePath + relPath, std::ios::binary);
-
             std::string uncompressedFile;
-            uncompressedFile.resize(fileStat.st_size);
-            long unsigned int pos = 0;
-            do
+            const ssize_t size =
+                FileUtil::readFile(basePath + relPath, uncompressedFile, MaxFileSizeToCacheInBytes);
+            assert(size < MaxFileSizeToCacheInBytes && "MaxFileSizeToCacheInBytes is too small for "
+                                                       "static-file serving; please increase it");
+            if (size <= 0)
             {
-                file.read(&uncompressedFile[pos], fileStat.st_size);
-                const long unsigned int size = file.gcount();
-                if (size == 0)
-                    break;
-
-                pos += size;
-
-            } while (true);
+                assert(uncompressedFile.empty() &&
+                       "Unexpected data in uncompressedFile after failed read");
+                if (size < 0)
+                {
+                    LOG_ERR("Failed to read file [" << basePath + relPath
+                                                    << "] or is too large to cache and serve");
+                }
+            }
 
             FileHash.emplace(prefix + relPath,
                              std::make_pair(std::move(uncompressedFile), std::string()));
         }
         else if (S_ISREG(fileStat.st_mode))
         {
+            std::string uncompressedFile;
+            const ssize_t size =
+                FileUtil::readFile(basePath + relPath, uncompressedFile, MaxFileSizeToCacheInBytes);
+            assert(size < MaxFileSizeToCacheInBytes && "MaxFileSizeToCacheInBytes is too small for "
+                                                       "static-file serving; please increase it");
+            if (size <= 0)
+            {
+                assert(uncompressedFile.empty() &&
+                       "Unexpected data in uncompressedFile after failed read");
+                if (size < 0)
+                {
+                    LOG_ERR("Failed to read file [" << basePath + relPath
+                                                    << "] or is too large to cache and serve");
+                }
+
+                // Always add the entry, even if the contents are empty.
+                FileHash.emplace(prefix + relPath,
+                                 std::make_pair(std::move(uncompressedFile), std::string()));
+                continue;
+            }
+
             z_stream strm;
             strm.zalloc = Z_NULL;
             strm.zfree = Z_NULL;
@@ -858,51 +883,41 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
             const int initResult = deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY);
             if (initResult != Z_OK)
             {
-                 LOG_ERR("Failed to deflateInit2, result: " << initResult);
-                 continue;
+                LOG_ERR("Failed to deflateInit2 for file [" << basePath + relPath
+                                                            << "], result: " << initResult);
+                // Add the uncompressed version; it's better to serve uncompressed than nothing at all.
+                FileHash.emplace(prefix + relPath,
+                                 std::make_pair(std::move(uncompressedFile), std::string()));
+                continue;
             }
 
             fileCount++;
             filesRead.append(currentFile->d_name);
             filesRead += ' ';
 
-            std::ifstream file(basePath + relPath, std::ios::binary);
-
-            std::unique_ptr<char[]> buf = std::make_unique<char[]>(fileStat.st_size);
+            // Compress.
+            assert(size > 0 && "No data to compress");
+            assert(!uncompressedFile.empty() && "Unexpected empty uncompressedFile");
             std::string compressedFile;
-            compressedFile.reserve(fileStat.st_size);
-            std::string uncompressedFile;
-            uncompressedFile.reserve(fileStat.st_size);
-            do
+            const long unsigned int compSize = compressBound(size);
+            compressedFile.resize(compSize);
+            strm.next_in = (unsigned char*)&uncompressedFile[0];
+            strm.avail_in = size;
+            strm.avail_out = compSize;
+            strm.next_out = (unsigned char*)&compressedFile[0];
+            strm.total_out = strm.total_in = 0;
+
+            const int deflateResult = deflate(&strm, Z_FINISH);
+            if (deflateResult != Z_OK && deflateResult != Z_STREAM_END)
             {
-                file.read(&buf[0], fileStat.st_size);
-                const long unsigned int size = file.gcount();
-                if (size == 0)
-                    break;
-
-                const long unsigned int compSize = compressBound(size);
-                char *cbuf = (char *)calloc(compSize, sizeof(char));
-
-                strm.next_in = (unsigned char *)&buf[0];
-                strm.avail_in = size;
-                strm.avail_out = compSize;
-                strm.next_out = (unsigned char *)&cbuf[0];
-                strm.total_out = strm.total_in = 0;
-
-                const int deflateResult = deflate(&strm, Z_FINISH);
-                if (deflateResult != Z_OK && deflateResult != Z_STREAM_END)
-                {
-                    LOG_ERR("Failed to deflate, result: " << deflateResult);
-                    free(cbuf);
-                    break;
-                }
-
-                compressedFile.append(cbuf, compSize - strm.avail_out);
-                free(cbuf);
-
-                uncompressedFile.append(buf.get(), size);
-
-            } while(true);
+                LOG_ERR("Failed to deflate [" << basePath + relPath
+                                              << "], result: " << deflateResult);
+                compressedFile.clear(); // Can't trust the compressed data, if any.
+            }
+            else
+            {
+                compressedFile.resize(compSize - strm.avail_out);
+            }
 
             FileHash.emplace(prefix + relPath, std::make_pair(std::move(uncompressedFile),
                                                               std::move(compressedFile)));
@@ -918,7 +933,9 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
 
 const std::string *FileServerRequestHandler::getCompressedFile(const std::string &path)
 {
-    return &FileHash[path].second;
+    // If a compressed version is not available, return the original uncompressed data.
+    const auto& pair = FileHash[path];
+    return pair.second.empty() ? &pair.first : &pair.second;
 }
 
 const std::string *FileServerRequestHandler::getUncompressedFile(const std::string &path)
@@ -946,11 +963,13 @@ std::string FileServerRequestHandler::getRequestPathname(const HTTPRequest& requ
 #if !MOBILEAPP
     bool isWasm = false;
 
+#if ENABLE_DEBUG
     if (COOLWSD::WASMState == COOLWSD::WASMActivationState::Forced)
     {
         isWasm = (path.find("/browser/dist/wasm/") == std::string::npos);
     }
     else
+#endif
     {
         const std::string wopiSrc = requestDetails.getLineModeKey(std::string());
         if (!wopiSrc.empty())
@@ -997,10 +1016,47 @@ std::string FileServerRequestHandler::getRequestPathname(const HTTPRequest& requ
     return path;
 }
 
-constexpr char BRANDING[] = "branding";
-#if ENABLE_SUPPORT_KEY
-constexpr char BRANDING_UNSUPPORTED[] = "branding-unsupported";
-#endif
+/*
+  Spinning wheel
+
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'>
+   <circle transform='rotate(0)' transform-origin='center' fill='none' stroke='#FF156D' stroke-width='15' stroke-linecap='round' stroke-dasharray='230 1000' stroke-dashoffset='0' cx='100' cy='100' r='70'>
+     <animateTransform
+         attributeName='transform'
+         type='rotate'
+         from='0'
+         to='360'
+         dur='2'
+         repeatCount='indefinite'>
+      </animateTransform>
+   </circle>
+</svg>
+
+<meta name="previewImg" content="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyMDAgMjAwJz4KICAgPGNpcmNsZSB0cmFuc2Zvcm09J3JvdGF0ZSgwKScgdHJhbnNmb3JtLW9yaWdpbj0nY2VudGVyJyBmaWxsPSdub25lJyBzdHJva2U9JyNGRjE1NkQnIHN0cm9rZS13aWR0aD0nMTUnIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWRhc2hhcnJheT0nMjMwIDEwMDAnIHN0cm9rZS1kYXNob2Zmc2V0PScwJyBjeD0nMTAwJyBjeT0nMTAwJyByPSc3MCc+CiAgICAgPGFuaW1hdGVUcmFuc2Zvcm0KICAgICAgICAgYXR0cmlidXRlTmFtZT0ndHJhbnNmb3JtJwogICAgICAgICB0eXBlPSdyb3RhdGUnCiAgICAgICAgIGZyb209JzAnCiAgICAgICAgIHRvPSczNjAnCiAgICAgICAgIGR1cj0nMicKICAgICAgICAgcmVwZWF0Q291bnQ9J2luZGVmaW5pdGUnPgogICAgICA8L2FuaW1hdGVUcmFuc2Zvcm0+CiAgIDwvY2lyY2xlPgo8L3N2Zz4=">
+
+ Smile
+<?xml version="1.0" encoding="iso-8859-1"?>
+<svg fill="#FF156D" height="800px" width="800px" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 330 330" xml:space="preserve">
+<g id="XMLID_92_">
+  <path id="XMLID_93_" d="M165,0C74.019,0,0,74.019,0,165s74.019,165,165,165s165-74.019,165-165S255.981,0,165,0z M165,300
+  c-74.439,0-135-60.561-135-135S90.561,30,165,30s135,60.561,135,135S239.439,300,165,300z"/>
+    <path id="XMLID_104_" d="M205.306,205.305c-22.226,22.224-58.386,22.225-80.611,0.001c-5.857-5.858-15.355-5.858-21.213,0
+    c-5.858,5.858-5.858,15.355,0,21.213c16.963,16.963,39.236,25.441,61.519,25.441c22.276,0,44.56-8.482,61.519-25.441
+    c5.858-5.857,5.858-15.355,0-21.213C220.661,199.447,211.163,199.448,205.306,205.305z"/>
+    <path id="XMLID_105_" d="M115.14,147.14c3.73-3.72,5.86-8.88,5.86-14.14c0-5.26-2.13-10.42-5.86-14.14
+    c-3.72-3.72-8.88-5.86-14.14-5.86c-5.271,0-10.42,2.14-14.141,5.86C83.13,122.58,81,127.74,81,133c0,5.26,2.13,10.42,5.859,14.14C90.58,150.87,95.74,153,101,153S111.42,150.87,115.14,147.14z"/>
+    <path id="XMLID_106_" d="M229,113c-5.26,0-10.42,2.14-14.141,5.86C211.14,122.58,209,127.73,209,133c0,5.27,2.14,10.42,5.859,14.14
+    C218.58,150.87,223.74,153,229,153s10.42-2.13,14.14-5.86c3.72-3.72,5.86-8.87,5.86-14.14c0-5.26-2.141-10.42-5.86-14.14
+    C239.42,115.14,234.26,113,229,113z"/>
+</g>
+</svg>
+
+<meta name="previewSmile" content="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pgo8c3ZnIGZpbGw9IiNGRjE1NkQiIGhlaWdodD0iODAwcHgiIHdpZHRoPSI4MDBweCIgdmVyc2lvbj0iMS4xIiBpZD0iTGF5ZXJfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgdmlld0JveD0iMCAwIDMzMCAzMzAiIHhtbDpzcGFjZT0icHJlc2VydmUiPgo8ZyBpZD0iWE1MSURfOTJfIj4KICA8cGF0aCBpZD0iWE1MSURfOTNfIiBkPSJNMTY1LDBDNzQuMDE5LDAsMCw3NC4wMTksMCwxNjVzNzQuMDE5LDE2NSwxNjUsMTY1czE2NS03NC4wMTksMTY1LTE2NVMyNTUuOTgxLDAsMTY1LDB6IE0xNjUsMzAwCiAgYy03NC40MzksMC0xMzUtNjAuNTYxLTEzNS0xMzVTOTAuNTYxLDMwLDE2NSwzMHMxMzUsNjAuNTYxLDEzNSwxMzVTMjM5LjQzOSwzMDAsMTY1LDMwMHoiLz4KICAgIDxwYXRoIGlkPSJYTUxJRF8xMDRfIiBkPSJNMjA1LjMwNiwyMDUuMzA1Yy0yMi4yMjYsMjIuMjI0LTU4LjM4NiwyMi4yMjUtODAuNjExLDAuMDAxYy01Ljg1Ny01Ljg1OC0xNS4zNTUtNS44NTgtMjEuMjEzLDAKICAgIGMtNS44NTgsNS44NTgtNS44NTgsMTUuMzU1LDAsMjEuMjEzYzE2Ljk2MywxNi45NjMsMzkuMjM2LDI1LjQ0MSw2MS41MTksMjUuNDQxYzIyLjI3NiwwLDQ0LjU2LTguNDgyLDYxLjUxOS0yNS40NDEKICAgIGM1Ljg1OC01Ljg1Nyw1Ljg1OC0xNS4zNTUsMC0yMS4yMTNDMjIwLjY2MSwxOTkuNDQ3LDIxMS4xNjMsMTk5LjQ0OCwyMDUuMzA2LDIwNS4zMDV6Ii8+CiAgICA8cGF0aCBpZD0iWE1MSURfMTA1XyIgZD0iTTExNS4xNCwxNDcuMTRjMy43My0zLjcyLDUuODYtOC44OCw1Ljg2LTE0LjE0YzAtNS4yNi0yLjEzLTEwLjQyLTUuODYtMTQuMTQKICAgIGMtMy43Mi0zLjcyLTguODgtNS44Ni0xNC4xNC01Ljg2Yy01LjI3MSwwLTEwLjQyLDIuMTQtMTQuMTQxLDUuODZDODMuMTMsMTIyLjU4LDgxLDEyNy43NCw4MSwxMzNjMCw1LjI2LDIuMTMsMTAuNDIsNS44NTksMTQuMTRDOTAuNTgsMTUwLjg3LDk1Ljc0LDE1MywxMDEsMTUzUzExMS40MiwxNTAuODcsMTE1LjE0LDE0Ny4xNHoiLz4KICAgIDxwYXRoIGlkPSJYTUxJRF8xMDZfIiBkPSJNMjI5LDExM2MtNS4yNiwwLTEwLjQyLDIuMTQtMTQuMTQxLDUuODZDMjExLjE0LDEyMi41OCwyMDksMTI3LjczLDIwOSwxMzNjMCw1LjI3LDIuMTQsMTAuNDIsNS44NTksMTQuMTQKICAgIEMyMTguNTgsMTUwLjg3LDIyMy43NCwxNTMsMjI5LDE1M3MxMC40Mi0yLjEzLDE0LjE0LTUuODZjMy43Mi0zLjcyLDUuODYtOC44Nyw1Ljg2LTE0LjE0YzAtNS4yNi0yLjE0MS0xMC40Mi01Ljg2LTE0LjE0CiAgICBDMjM5LjQyLDExNS4xNCwyMzQuMjYsMTEzLDIyOSwxMTN6Ii8+CjwvZz4KPC9zdmc+">
+
+*/
+
+constexpr std::string_view BRANDING = "branding";
+constexpr std::string_view SUPPORT_KEY_BRANDING_UNSUPPORTED = "branding-unsupported";
 
 static const std::string ACCESS_TOKEN = "%ACCESS_TOKEN%";
 static const std::string ACCESS_TOKEN_TTL = "%ACCESS_TOKEN_TTL%";
@@ -1011,6 +1067,7 @@ static const std::string POSTMESSAGE_ORIGIN = "%POSTMESSAGE_ORIGIN%";
 static const std::string BRANDING_THEME = "%BRANDING_THEME%";
 static const std::string CHECK_FILE_INFO_OVERRIDE = "%CHECK_FILE_INFO_OVERRIDE%";
 static const std::string BUYPRODUCT_URL = "%BUYPRODUCT_URL%";
+static const std::string PERMISSION = "%PERMISSION%";
 
 /// Per user request variables.
 /// Holds access_token, css_variables, postmessage_origin, etc.
@@ -1024,7 +1081,7 @@ class UserRequestVars
         // Escape bad characters in access token.
         // These are placed directly in javascript in cool.html, we need to make sure
         // that no one can do anything nasty with their clever inputs.
-        const std::string escaped = Util::encodeURIComponent(value, "'");
+        const std::string escaped = Uri::encode(value, "'");
         _vars[var] = escaped;
 
         LOG_TRC("Field [" << field << "] for var [" << var << "] = [" << escaped << ']');
@@ -1100,6 +1157,8 @@ public:
 
         extractVariable(form, "buy_product", BUYPRODUCT_URL);
 
+        extractVariable(form, "permission", PERMISSION);
+
         std::string buyProduct;
         {
             std::lock_guard<std::mutex> lock(COOLWSD::RemoteConfigMutex);
@@ -1111,7 +1170,7 @@ public:
             buyProduct = form.get("buy_product", "");
         }
 
-        const std::string escapedBuyProduct = Util::encodeURIComponent(buyProduct, "'");
+        const std::string escapedBuyProduct = Uri::encode(buyProduct, "'");
         _vars[BUYPRODUCT_URL] = escapedBuyProduct;
 
         LOG_TRC("Field [buy_product] for var [" << BUYPRODUCT_URL << "] = [" << escapedBuyProduct
@@ -1129,10 +1188,17 @@ private:
     const std::string _blank;
 };
 
-void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
-                                              const RequestDetails &requestDetails,
-                                              Poco::MemoryInputStream& message,
-                                              const std::shared_ptr<StreamSocket>& socket)
+namespace
+{
+std::string boolToString(const bool value)
+{
+    return value ? std::string("true"): std::string("false");
+}
+}
+
+FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::preprocessFile(
+    const HTTPRequest& request, http::Response& httpResponse, const RequestDetails& requestDetails,
+    Poco::MemoryInputStream& message, const std::shared_ptr<StreamSocket>& socket)
 {
     const ServerURL cnxDetails(requestDetails);
 
@@ -1157,7 +1223,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     }
     if (buyProduct.empty())
         buyProduct = form.get("buy_product", "");
-    LOG_TRC("buy_product=" << buyProduct);
+    LOG_TRC("buy_product=" << buyProduct << " host_session_id=" << form.get("host_session_id", ""));
 
     std::string socketProxy = "false";
     if (requestDetails.isProxy())
@@ -1174,22 +1240,30 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     Poco::replaceInPlace(preprocess, ACCESS_TOKEN_TTL, urv[ACCESS_TOKEN_TTL]);
     Poco::replaceInPlace(preprocess, ACCESS_HEADER, urv[ACCESS_HEADER]);
     Poco::replaceInPlace(preprocess, std::string("%HOST%"), cnxDetails.getWebSocketUrl());
-    Poco::replaceInPlace(preprocess, std::string("%VERSION%"), std::string(COOLWSD_VERSION_HASH));
-    Poco::replaceInPlace(preprocess, std::string("%COOLWSD_VERSION%"), std::string(COOLWSD_VERSION));
+    Poco::replaceInPlace(preprocess, std::string("%VERSION%"), Util::getCoolVersionHash());
+    Poco::replaceInPlace(preprocess, std::string("%COOLWSD_VERSION%"), Util::getCoolVersion());
     Poco::replaceInPlace(preprocess, std::string("%SERVICE_ROOT%"), responseRoot);
-    Poco::replaceInPlace(preprocess, UI_DEFAULTS,
-                         uiDefaultsToJSON(urv[UI_DEFAULTS], userInterfaceMode, userInterfaceTheme, savedUIState));
+    Poco::replaceInPlace(preprocess, UI_DEFAULTS, macaron::Base64::Encode(
+                         uiDefaultsToJSON(urv[UI_DEFAULTS], userInterfaceMode, userInterfaceTheme, savedUIState)));
     Poco::replaceInPlace(preprocess, std::string("%UI_THEME%"), userInterfaceTheme); // UI_THEME refers to light or dark theme
     Poco::replaceInPlace(preprocess, BRANDING_THEME, urv[BRANDING_THEME]);
     Poco::replaceInPlace(preprocess, std::string("%SAVED_UI_STATE%"), savedUIState);
     Poco::replaceInPlace(preprocess, POSTMESSAGE_ORIGIN, urv[POSTMESSAGE_ORIGIN]);
     Poco::replaceInPlace(preprocess, CHECK_FILE_INFO_OVERRIDE,
                          checkFileInfoToJSON(urv[CHECK_FILE_INFO_OVERRIDE]));
+    Poco::replaceInPlace(preprocess, std::string("%WOPI_HOST_ID%"), form.get("host_session_id", ""));
 
     const auto& config = Application::instance().config();
 
     std::string protocolDebug = stringifyBoolFromConfig(config, "logging.protocol", false);
     Poco::replaceInPlace(preprocess, std::string("%PROTOCOL_DEBUG%"), protocolDebug);
+
+    bool enableDebug = false;
+#if ENABLE_DEBUG
+    enableDebug = true;
+#endif
+    std::string enableDebugStr = stringifyBoolFromConfig(config, "logging.protocol", enableDebug);
+    Poco::replaceInPlace(preprocess, std::string("%ENABLE_DEBUG%"), enableDebugStr);
 
     static const std::string hexifyEmbeddedUrls =
         COOLWSD::getConfigValue<bool>("hexify_embedded_urls", false) ? "true" : "false";
@@ -1207,15 +1281,16 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     std::string brandCSS(Poco::format(linkCSS, responseRoot, std::string(BRANDING)));
     std::string brandJS(Poco::format(scriptJS, responseRoot, std::string(BRANDING)));
 
-#if ENABLE_SUPPORT_KEY
-    const std::string keyString = config.getString("support_key", "");
-    SupportKey key(keyString);
-    if (!key.verify() || key.validDaysRemaining() <= 0)
+    if (config::isSupportKeyEnabled())
     {
-        brandCSS = Poco::format(linkCSS, responseRoot, std::string(BRANDING_UNSUPPORTED));
-        brandJS = Poco::format(scriptJS, responseRoot, std::string(BRANDING_UNSUPPORTED));
+        const std::string keyString = config.getString("support_key", "");
+        SupportKey key(keyString);
+        if (!key.verify() || key.validDaysRemaining() <= 0)
+        {
+            brandCSS = Poco::format(linkCSS, responseRoot, std::string(SUPPORT_KEY_BRANDING_UNSUPPORTED));
+            brandJS = Poco::format(scriptJS, responseRoot, std::string(SUPPORT_KEY_BRANDING_UNSUPPORTED));
+        }
     }
-#endif
 
     Poco::replaceInPlace(preprocess, std::string("<!--%BRANDING_CSS%-->"), brandCSS);
     Poco::replaceInPlace(preprocess, std::string("<!--%BRANDING_JS%-->"), brandJS);
@@ -1231,9 +1306,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     else
         Poco::replaceInPlace(preprocess, std::string("%BROWSER_LOGGING%"), std::string());
 
-    const auto groupDownloadAs = stringifyBoolFromConfig(config, "per_view.group_download_as", true);
-    Poco::replaceInPlace(preprocess, std::string("%GROUP_DOWNLOAD_AS%"), groupDownloadAs);
-    const unsigned int outOfFocusTimeoutSecs = config.getUInt("per_view.out_of_focus_timeout_secs", 60);
+    const unsigned int outOfFocusTimeoutSecs = config.getUInt("per_view.out_of_focus_timeout_secs", 300);
     Poco::replaceInPlace(preprocess, std::string("%OUT_OF_FOCUS_TIMEOUT_SECS%"), std::to_string(outOfFocusTimeoutSecs));
     const unsigned int idleTimeoutSecs = config.getUInt("per_view.idle_timeout_secs", 900);
     Poco::replaceInPlace(preprocess, std::string("%IDLE_TIMEOUT_SECS%"), std::to_string(idleTimeoutSecs));
@@ -1266,7 +1339,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
         userInterfaceModeConfig = "notebookbar";
 
     if (userInterfaceModeConfig == "classic" || userInterfaceModeConfig == "notebookbar" || userInterfaceMode.empty())
-        userInterfaceMode = userInterfaceModeConfig;
+        userInterfaceMode = std::move(userInterfaceModeConfig);
 
     // default to the notebookbar if the value is "default" or whatever
     // nonsensical
@@ -1296,17 +1369,24 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
         Poco::replaceInPlace(preprocess, std::string("%AUTO_SHOW_FEEDBACK%"), (std::string)"true");
     }
 
+    bool allowUpdateNotification = config.getBool("allow_update_popup", true);
+    Poco::replaceInPlace(preprocess, std::string("%ENABLE_UPDATE_NOTIFICATION%"), boolToString(allowUpdateNotification));
 
     Poco::replaceInPlace(preprocess, std::string("%FEEDBACK_URL%"), std::string(FEEDBACK_URL));
     Poco::replaceInPlace(preprocess, std::string("%WELCOME_URL%"), std::string(WELCOME_URL));
 
     Poco::replaceInPlace(preprocess, BUYPRODUCT_URL, urv[BUYPRODUCT_URL]);
 
-    Poco::replaceInPlace(preprocess, std::string("%DEEPL_ENABLED%"), (config.getBool("deepl.enabled", false) ? std::string("true"): std::string("false")));
-    Poco::replaceInPlace(preprocess, std::string("%ZOTERO_ENABLED%"), (config.getBool("zotero.enable", true) ? std::string("true"): std::string("false")));
-    Poco::replaceInPlace(preprocess, std::string("%WASM_ENABLED%"), (COOLWSD::getConfigValue<bool>("wasm.enable", false) ? std::string("true"): std::string("false")));
+    Poco::replaceInPlace(preprocess, std::string("%DEEPL_ENABLED%"), boolToString(config.getBool("deepl.enabled", false)));
+    Poco::replaceInPlace(preprocess, std::string("%ZOTERO_ENABLED%"), boolToString(config.getBool("zotero.enable", true)));
+    Poco::replaceInPlace(preprocess, std::string("%WASM_ENABLED%"), boolToString(COOLWSD::getConfigValue<bool>("wasm.enable", false)));
     Poco::URI indirectionURI(config.getString("indirection_endpoint.url", ""));
     Poco::replaceInPlace(preprocess, std::string("%INDIRECTION_URL%"), indirectionURI.toString());
+
+    bool geoLocationSetup = config.getBool("indirection_endpoint.geolocation_setup.enable", false);
+    if (geoLocationSetup)
+        Poco::replaceInPlace(preprocess, std::string("%GEOLOCATION_SETUP%"),
+                             boolToString(geoLocationSetup));
 
     const std::string mimeType = "text/html";
 
@@ -1315,29 +1395,26 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     ContentSecurityPolicy csp;
     csp.appendDirective("default-src", "'none'");
     csp.appendDirective("frame-src", "'self'");
-    csp.appendDirective("frame-src", WELCOME_URL);
-    csp.appendDirective("frame-src", FEEDBACK_URL);
-    csp.appendDirective("frame-src", Util::decodeURIComponent(urv[BUYPRODUCT_URL]));
+    csp.appendDirectiveUrl("frame-src", WELCOME_URL);
+    csp.appendDirectiveUrl("frame-src", FEEDBACK_URL);
+    csp.appendDirectiveUrl("frame-src", Uri::decode(urv[BUYPRODUCT_URL]));
     csp.appendDirective("frame-src", "blob:"); // Equivalent to unsafe-eval!
     csp.appendDirective("connect-src", "'self'");
-    csp.appendDirective("connect-src", "https://www.zotero.org");
-    csp.appendDirective("connect-src", "https://api.zotero.org");
-    csp.appendDirective("connect-src", cnxDetails.getWebSocketUrl());
-    csp.appendDirective("connect-src", cnxDetails.getWebServerUrl());
-    csp.appendDirective("connect-src", indirectionURI.getAuthority());
+    csp.appendDirectiveUrl("connect-src", "https://www.zotero.org");
+    csp.appendDirectiveUrl("connect-src", "https://api.zotero.org");
+    csp.appendDirectiveUrl("connect-src", cnxDetails.getWebSocketUrl());
+    csp.appendDirectiveUrl("connect-src", cnxDetails.getWebServerUrl());
+    csp.appendDirectiveUrl("connect-src", indirectionURI.getAuthority());
     csp.appendDirective("script-src", "'self'");
-    csp.appendDirective("script-src", "'unsafe-inline'");
+    csp.appendDirective("script-src", "'unsafe-eval'");
     csp.appendDirective("style-src", "'self'");
-    csp.appendDirective("style-src", "'unsafe-inline'");
     csp.appendDirective("font-src", "'self'");
-    csp.appendDirective("font-src", "data:"); // Equivalent to unsafe-inline!
     csp.appendDirective("object-src", "'self'");
-    csp.appendDirective("object-src", "blob:"); // Equivalent to unsafe-eval!
     csp.appendDirective("media-src", "'self'");
-    csp.appendDirective("media-src", cnxDetails.getWebServerUrl());
+    csp.appendDirectiveUrl("media-src", cnxDetails.getWebServerUrl());
     csp.appendDirective("img-src", "'self'");
     csp.appendDirective("img-src", "data:"); // Equivalent to unsafe-inline!
-    csp.appendDirective("img-src", "https://www.collaboraoffice.com/");
+    csp.appendDirectiveUrl("img-src", "https://www.collaboraoffice.com/");
 
     // Frame ancestors: Allow coolwsd host, wopi host and anything configured.
     const std::string configFrameAncestor = config.getString("net.frame_ancestors", "");
@@ -1358,16 +1435,20 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     if (uriHost.getHost() != configFrameAncestor)
         frameAncestors += ' ' + uriHost.getHost() + ":*";
 
+    std::string wopiSrc;
     for (const auto& param : params)
     {
         if (param.first == "WOPISrc")
         {
             if (!HttpHelper::verifyWOPISrc(request.getURI(), param.second, socket))
             {
-                return;
+                httpResponse.header().setConnectionToken(http::Header::ConnectionToken::Close);
+                return ResourceAccessDetails();
             }
 
-            const Poco::URI uriWopiFrameAncestor(Util::decodeURIComponent(param.second));
+            const Poco::URI uriWopiFrameAncestor(Uri::decode(param.second));
+            wopiSrc = uriWopiFrameAncestor.toString();
+
             // Remove parameters from URL
             const std::string& wopiFrameAncestor = uriWopiFrameAncestor.getHost();
             if (wopiFrameAncestor != uriHost.getHost() && wopiFrameAncestor != configFrameAncestor)
@@ -1387,7 +1468,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
         // frame ancestors are also allowed for img-src in order to load the views avatars
         csp.appendDirective("img-src", frameAncestors);
         csp.appendDirective("frame-ancestors", frameAncestors);
-        const std::string escapedFrameAncestors = Util::encodeURIComponent(frameAncestors, "'");
+        const std::string escapedFrameAncestors = Uri::encode(frameAncestors, "'");
         Poco::replaceInPlace(preprocess, std::string("%FRAME_ANCESTORS%"), escapedFrameAncestors);
     }
     else
@@ -1395,18 +1476,13 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
         LOG_TRC("Denied all frame ancestors");
     }
 
-    std::ostringstream oss;
-    oss << "HTTP/1.1 200 OK\r\n"
-        "Date: " << Util::getHttpTimeNow() << "\r\n"
-        "Last-Modified: " << Util::getHttpTimeNow() << "\r\n"
-        "User-Agent: " << WOPI_AGENT_STRING << "\r\n"
-        "Cache-Control:max-age=11059200\r\n"
-        "ETag: \"" COOLWSD_VERSION_HASH "\"\r\n"
-        "Content-Length: " << preprocess.size() << "\r\n"
-        "Content-Type: " << mimeType << "\r\n"
-        "X-Content-Type-Options: nosniff\r\n"
-        "X-XSS-Protection: 1; mode=block\r\n"
-        "Referrer-Policy: no-referrer\r\n";
+    httpResponse.set("Last-Modified", Util::getHttpTimeNow());
+    httpResponse.set("Cache-Control", "max-age=11059200");
+    httpResponse.set("ETag", COOLWSD_VERSION_HASH);
+
+    httpResponse.add("X-Content-Type-Options", "nosniff");
+    httpResponse.add("X-XSS-Protection", "1; mode=block");
+    httpResponse.add("Referrer-Policy", "no-referrer");
 
 #if !MOBILEAPP
     // if we have richdocuments with:
@@ -1419,9 +1495,9 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     // capabilities shows hasWASMSupport
     if (COOLWSD::WASMState != COOLWSD::WASMActivationState::Disabled)
     {
-        oss << "Cross-Origin-Opener-Policy: same-origin\r\n";
-        oss << "Cross-Origin-Embedder-Policy: require-corp\r\n";
-        oss << "Cross-Origin-Resource-Policy: cross-origin\r\n";
+        httpResponse.add("Cross-Origin-Opener-Policy", "same-origin");
+        httpResponse.add("Cross-Origin-Embedder-Policy", "require-corp");
+        httpResponse.add("Cross-Origin-Resource-Policy", "cross-origin");
     }
 
     const bool wasm = (relPath.find("wasm") != std::string::npos);
@@ -1435,7 +1511,7 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
     csp.merge(config.getString("net.content_security_policy", ""));
 
     // Append CSP to response headers too
-    oss << "Content-Security-Policy: " << csp.generate() << "\r\n";
+    httpResponse.add("Content-Security-Policy", csp.generate());
 
     // Setup HTTP Public key pinning
     if ((COOLWSD::isSSLEnabled() || COOLWSD::isSSLTermination()) && config.getBool("ssl.hpkp[@enable]", false))
@@ -1485,24 +1561,25 @@ void FileServerRequestHandler::preprocessFile(const HTTPRequest& request,
             {
                 // Only send validation failure reports to reportUri while still allowing UAs to
                 // connect to the server
-                oss << "Public-Key-Pins-Report-Only: " << hpkpOss.str() << "\r\n";
+                httpResponse.add("Public-Key-Pins-Report-Only", hpkpOss.str());
             }
             else
             {
-                oss << "Public-Key-Pins: " << hpkpOss.str() << "\r\n";
+                httpResponse.add("Public-Key-Pins", hpkpOss.str());
             }
         }
     }
 
-    oss << "\r\n"
-        << preprocess;
+    httpResponse.setBody(preprocess, mimeType);
 
-    socket->send(oss.str());
+    socket->send(httpResponse);
     LOG_TRC("Sent file: " << relPath << ": " << preprocess);
+
+    return ResourceAccessDetails(std::move(wopiSrc), urv[ACCESS_TOKEN], urv[PERMISSION]);
 }
 
-
 void FileServerRequestHandler::preprocessWelcomeFile(const HTTPRequest& request,
+                                                     http::Response& httpResponse,
                                                      const RequestDetails& requestDetails,
                                                      Poco::MemoryInputStream& message,
                                                      const std::shared_ptr<StreamSocket>& socket)
@@ -1516,15 +1593,11 @@ void FileServerRequestHandler::preprocessWelcomeFile(const HTTPRequest& request,
     uiTheme = (uiTheme == "dark") ? "dark" : "light";
     Poco::replaceInPlace(templateWelcome, std::string("%UI_THEME%"), uiTheme);
 
-    http::Response httpResponse(http::StatusCode::OK);
-
     // Ask UAs to block if they detect any XSS attempt
     httpResponse.add("X-XSS-Protection", "1; mode=block");
     // No referrer-policy
     httpResponse.add("Referrer-Policy", "no-referrer");
     httpResponse.add("X-Content-Type-Options", "nosniff");
-    httpResponse.set("Server", HTTP_SERVER_STRING);
-    httpResponse.set("Date", Util::getHttpTimeNow());
 
     httpResponse.setBody(std::move(templateWelcome));
     socket->send(httpResponse);
@@ -1533,16 +1606,30 @@ void FileServerRequestHandler::preprocessWelcomeFile(const HTTPRequest& request,
 }
 
 void FileServerRequestHandler::preprocessAdminFile(const HTTPRequest& request,
-                                                   const RequestDetails &requestDetails,
+                                                   http::Response& response,
+                                                   const RequestDetails& requestDetails,
                                                    const std::shared_ptr<StreamSocket>& socket)
 {
-    Poco::Net::HTTPResponse response;
-
     if (!COOLWSD::AdminEnabled)
         throw Poco::FileAccessDeniedException("Admin console disabled");
 
-    if (!FileServerRequestHandler::isAdminLoggedIn(request, response))
-        throw Poco::Net::NotAuthenticatedException("Invalid admin login");
+    std::string jwtToken;
+    if (!isAdminLoggedIn(request, jwtToken))
+    {
+        // Not logged in, so let's log in now.
+        if (!authenticateAdmin(Poco::Net::HTTPBasicCredentials(request), response, jwtToken))
+        {
+            throw Poco::Net::NotAuthenticatedException("Invalid admin login");
+        }
+
+        // New login, log.
+        static bool showLog =
+            COOLWSD::getConfigValue<bool>("admin_console.logging.admin_login", true);
+        if (showLog)
+        {
+            LOG_ANY("Admin logged in with source IPAddress [" << socket->clientAddress() << ']');
+        }
+    }
 
     const ServerURL cnxDetails(requestDetails);
     const std::string responseRoot = cnxDetails.getResponseRoot();
@@ -1557,39 +1644,7 @@ void FileServerRequestHandler::preprocessAdminFile(const HTTPRequest& request,
         Poco::Path(relPath).setFileName("admintemplate.html").toString();
     std::string templateFile = *getUncompressedFile(templatePath);
 
-    std::string jwtToken;
-    Poco::Net::NameValueCollection reqCookies;
-    std::vector<Poco::Net::HTTPCookie> resCookies;
-
-    response.getCookies(resCookies);
-    for (size_t it = 0; it < resCookies.size(); ++it)
-    {
-        if (resCookies[it].getName() == "jwt")
-        {
-            jwtToken = resCookies[it].getValue();
-            // when response contains the jwt we can determine that admin console is
-            // accessed for the first time by a specific client
-            bool showLog =
-                COOLWSD::getConfigValue<bool>("admin_console.logging.admin_login", true);
-            if (showLog)
-            {
-                LOG_ANY("Admin logged in with source IPAddress [" << socket->clientAddress()
-                                                                  << ']');
-            }
-            break;
-        }
-    }
-
-    if (jwtToken.empty())
-    {
-        request.getCookies(reqCookies);
-        if (reqCookies.has("jwt"))
-        {
-            jwtToken = reqCookies.get("jwt");
-        }
-    }
-
-    const std::string escapedJwtToken = Util::encodeURIComponent(jwtToken, "'");
+    const std::string escapedJwtToken = Uri::encode(jwtToken, "'");
     Poco::replaceInPlace(templateFile, std::string("%JWT_TOKEN%"), escapedJwtToken);
     if (relPath == "/browser/dist/admin/adminClusterOverview.html" ||
         relPath == "/browser/dist/admin/adminClusterOverviewAbout.html")
@@ -1612,17 +1667,18 @@ void FileServerRequestHandler::preprocessAdminFile(const HTTPRequest& request,
     std::string brandJS(Poco::format(scriptJS, responseRoot, std::string(BRANDING)));
     std::string brandFooter;
 
-#if ENABLE_SUPPORT_KEY
-    const auto& config = Application::instance().config();
-    const std::string keyString = config.getString("support_key", "");
-    SupportKey key(keyString);
-
-    if (!key.verify() || key.validDaysRemaining() <= 0)
+    if (config::isSupportKeyEnabled())
     {
-        brandJS = Poco::format(scriptJS, std::string(BRANDING_UNSUPPORTED));
-        brandFooter = Poco::format(footerPage, key.data(), Poco::DateTimeFormatter::format(key.expiry(), Poco::DateTimeFormat::RFC822_FORMAT));
+        const auto& config = Application::instance().config();
+        const std::string keyString = config.getString("support_key", "");
+        SupportKey key(keyString);
+
+        if (!key.verify() || key.validDaysRemaining() <= 0)
+        {
+            brandJS = Poco::format(scriptJS, std::string(SUPPORT_KEY_BRANDING_UNSUPPORTED));
+            brandFooter = Poco::format(footerPage, key.data(), Poco::DateTimeFormatter::format(key.expiry(), Poco::DateTimeFormat::RFC822_FORMAT));
+        }
     }
-#endif
 
     Poco::replaceInPlace(templateFile, std::string("<!--%BRANDING_JS%-->"), brandJS);
     Poco::replaceInPlace(templateFile, std::string("<!--%FOOTER%-->"), brandFooter);
@@ -1634,16 +1690,11 @@ void FileServerRequestHandler::preprocessAdminFile(const HTTPRequest& request,
     // No referrer-policy
     response.add("Referrer-Policy", "no-referrer");
     response.add("X-Content-Type-Options", "nosniff");
-    response.set("Server", HTTP_SERVER_STRING);
+    response.set("Server", http::getServerString());
     response.set("Date", Util::getHttpTimeNow());
 
-    response.setContentType("text/html");
-    response.setChunkedTransferEncoding(false);
-
-    std::ostringstream oss;
-    response.write(oss);
-    oss << templateFile;
-    socket->send(oss.str());
+    response.setBody(std::move(templateFile));
+    socket->send(response);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -34,6 +34,7 @@ class UnitWOPIFailUpload : public WOPIUploadConflictCommon
     using Base::OriginalDocContent;
 
     bool _unloadingModifiedDocDetected;
+    bool _putFailed;
 
     static constexpr std::size_t LimitStoreFailures = 2;
     static constexpr bool SaveOnExit = true;
@@ -42,6 +43,7 @@ public:
     UnitWOPIFailUpload()
         : Base("UnitWOPIFailUpload", OriginalDocContent)
         , _unloadingModifiedDocDetected(true)
+        , _putFailed(false)
     {
     }
 
@@ -56,6 +58,9 @@ public:
 
     void onDocBrokerCreate(const std::string& docKey) override
     {
+        // reset for the next document
+        _putFailed = false;
+
         Base::onDocBrokerCreate(docKey);
 
         if (_scenario == Scenario::VerifyOverwrite)
@@ -99,8 +104,9 @@ public:
         const bool force = wopiTimestamp.empty(); // Without a timestamp we force to always store.
 
         // We don't expect overwriting by forced uploading.
-        LOK_ASSERT_EQUAL_MESSAGE("Unexpected overwritting the document in storage", false, force);
+        LOK_ASSERT_EQUAL_MESSAGE("Unexpected overwritting the document in storage", _putFailed, force);
 
+        _putFailed = true;
         // Internal Server Error.
         return std::make_unique<http::Response>(http::StatusCode::InternalServerError);
     }
@@ -161,9 +167,8 @@ public:
         // We expect this to happen only with the disonnection test,
         // because only in that case there is no user input.
         LOK_ASSERT_MESSAGE("Expected reason to be 'Data-loss detected'",
-                           Util::startsWith(reason, "Data-loss detected"));
-        LOK_ASSERT_MESSAGE("Expected to be in Phase::WaitDocClose but was " + toString(_phase),
-                           _phase == Phase::WaitDocClose);
+                           reason.starts_with("Data-loss detected"));
+        LOK_ASSERT_STATE(_phase, Phase::WaitDocClose);
         _unloadingModifiedDocDetected = true;
 
         return failed();
@@ -246,9 +251,8 @@ public:
         // no upload attempts with expired tockens. And we
         // only have one session.
         LOK_ASSERT_MESSAGE("Expected reason to be 'Data-loss detected'",
-                           Util::startsWith(reason, "Data-loss detected"));
-        LOK_ASSERT_MESSAGE("Expected to be in Phase::WaitDocClose but was " + toString(_phase),
-                           _phase == Phase::Done);
+                           reason.starts_with("Data-loss detected"));
+        LOK_ASSERT_STATE(_phase, Phase::Done);
 
         passTest("Data-loss detected as expected");
         return failed();
@@ -370,7 +374,7 @@ public:
 
         // We expect this to happen, since we can't upload the document.
         LOK_ASSERT_MESSAGE("Expected reason to be 'Data-loss detected'",
-                           Util::startsWith(reason, "Data-loss detected"));
+                           reason.starts_with("Data-loss detected"));
 
         failTest("Data-loss detected");
 
@@ -477,6 +481,7 @@ public:
         // We intentionally fail uploading twice, so need at least 3 tries.
         config.setUInt("per_document.limit_store_failures", 3);
         config.setBool("per_document.always_save_on_exit", false);
+        config.setBool("storage.wopi.is_legacy_server", true);
     }
 
     std::unique_ptr<http::Response>
@@ -647,10 +652,10 @@ public:
     assertPutFileRequest(const Poco::Net::HTTPRequest& request) override
     {
         LOK_ASSERT_EQUAL(std::string("true"), request.get("X-COOL-WOPI-IsModifiedByUser"));
-        LOK_ASSERT_EQUAL(std::string("true"), request.get("X-LOOL-WOPI-IsModifiedByUser"));
+        LOK_ASSERT_EQUAL(false, request.has("X-LOOL-WOPI-IsModifiedByUser"));
 
         LOK_ASSERT_EQUAL(std::string("false"), request.get("X-COOL-WOPI-IsAutosave"));
-        LOK_ASSERT_EQUAL(std::string("false"), request.get("X-LOOL-WOPI-IsAutosave"));
+        LOK_ASSERT_EQUAL(false, request.has("X-LOOL-WOPI-IsAutosave"));
 
         // We save twice. First right after loading, unmodified.
         if (_phase == Phase::WaitFirstPutFile)
@@ -659,7 +664,7 @@ public:
 
             // Certainly not exiting yet.
             LOK_ASSERT_EQUAL(std::string("false"), request.get("X-COOL-WOPI-IsExitSave"));
-            LOK_ASSERT_EQUAL(std::string("false"), request.get("X-LOOL-WOPI-IsExitSave"));
+            LOK_ASSERT_EQUAL(false, request.has("X-LOOL-WOPI-IsExitSave"));
 
             // Fail with error.
             LOG_TST("Returning 500 to simulate PutFile failure");
@@ -672,7 +677,7 @@ public:
 
         // Triggered while closing.
         LOK_ASSERT_EQUAL(std::string("true"), request.get("X-COOL-WOPI-IsExitSave"));
-        LOK_ASSERT_EQUAL(std::string("true"), request.get("X-LOOL-WOPI-IsExitSave"));
+        LOK_ASSERT_EQUAL(false, request.has("X-LOOL-WOPI-IsExitSave"));
 
         return nullptr;
     }

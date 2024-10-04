@@ -1,21 +1,15 @@
-/* global describe it cy beforeEach require expect afterEach */
+/* global describe it cy beforeEach require expect */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var writerHelper = require('../../common/writer_helper');
 
 describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', function() {
-	var origTestFileName = 'insert_object.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		helper.setupAndLoadDocument('writer/insert_object.odt');
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	it('Insert local image.', function() {
@@ -23,7 +17,7 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 		// We can't use the menu item directly, because it would open file picker.
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Local Image...').should('be.visible');
 		cy.cGet('#insertgraphic[type=file]').attachFile('/mobile/writer/image_to_insert.png');
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g.Graphic').should('exist');
+		cy.cGet('#document-container svg g.Graphic').should('exist');
 	});
 
 	it('Insert comment.', function() {
@@ -39,6 +33,7 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 	});
 
 	it('Insert default table.', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		// Open Table submenu
 		cy.cGet('body').contains('.ui-header.level-0.mobile-wizard.ui-widget', 'Table').click();
@@ -48,6 +43,7 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 		// Table is inserted with the markers shown
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('exist');
 		helper.typeIntoDocument('{ctrl}a');
+		helper.copy();
 		// Two rows
 		cy.cGet('#copy-paste-container tr').should('have.length', 2);
 		// Four cells
@@ -55,6 +51,7 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 	});
 
 	it('Insert custom table.', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		// Open Table submenu
 		cy.cGet('body').contains('.ui-header.level-0.mobile-wizard.ui-widget', 'Table').click();
@@ -67,6 +64,7 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 		// Table is inserted with the markers shown
 		cy.cGet('.leaflet-marker-icon.table-column-resize-marker').should('exist');
 		helper.typeIntoDocument('{ctrl}a');
+		helper.copy();
 		// Three rows
 		cy.cGet('#copy-paste-container tr').should('have.length', 3);
 		// Nine cells
@@ -186,17 +184,19 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 	});
 
 	it('Insert hyperlink.', function() {
+		helper.setDummyClipboardForCopy();
 		mobileHelper.openInsertionWizard();
 		// Open hyperlink dialog
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Hyperlink...').click();
 		// Dialog is opened
-		cy.cGet('#hyperlink-link-box').should('exist');
+		cy.cGet('#hyperlink-link-box-input').should('exist');
 		// Type text and link
 		cy.cGet('#hyperlink-text-box').type('some text');
-		cy.cGet('#hyperlink-link-box').type('www.something.com');
+		cy.cGet('#hyperlink-link-box-input').type('www.something.com');
 		// Insert
 		cy.cGet('#response-ok').click();
 		writerHelper.selectAllTextOfDoc();
+		helper.copy();
 		helper.expectTextForClipboard('some text');
 		cy.cGet('#copy-paste-container p a').should('have.attr', 'href', 'http://www.something.com/');
 	});
@@ -206,10 +206,10 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 		// Open hyperlink dialog
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Hyperlink...').click();
 		// Dialog is opened
-		cy.cGet('#hyperlink-link-box').should('exist');
+		cy.cGet('#hyperlink-link-box-input').should('exist');
 		// Type text and link
 		cy.cGet('#hyperlink-text-box').type('some text');
-		cy.cGet('#hyperlink-link-box').type('www.something.com');
+		cy.cGet('#hyperlink-link-box-input').type('www.something.com');
 		// Insert
 		cy.cGet('#response-ok').click();
 		helper.typeIntoDocument('{leftArrow}');
@@ -223,10 +223,10 @@ describe(['tagmobile', 'tagnextcloud'], 'Insert objects via insertion wizard.', 
 		cy.cGet('body').contains('.menu-entry-with-icon', 'Shape').click();
 		cy.cGet('.col.w2ui-icon.basicshapes_rectangle').click();
 		// Check that the shape is there
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g').should('exist');
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg').then(function(svg) {
-			expect(svg[0].getBBox().width).to.be.greaterThan(0);
-			expect(svg[0].getBBox().height).to.be.greaterThan(0);
+		cy.cGet('#document-container svg g').should('exist');
+		cy.cGet('#canvas-container > svg > svg').then(function(svg) {
+			expect(parseInt(svg[0].style.width.replace('px', ''))).to.be.greaterThan(0);
+			expect(parseInt(svg[0].style.height.replace('px', ''))).to.be.greaterThan(0);
 		});
 	});
 });

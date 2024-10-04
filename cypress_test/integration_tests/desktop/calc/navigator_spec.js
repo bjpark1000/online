@@ -1,38 +1,32 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var { insertImage, deleteImage } = require('../../common/desktop_helper');
 
 describe.skip(['tagdesktop'], 'Navigator tests.', function () {
-	var origTestFileName = 'navigator.ods';
-	var testFileName;
 
 	beforeEach(function () {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		helper.setupAndLoadDocument('calc/navigator.ods');
 
 		cy.cGet('#menu-view').click();
 		cy.cGet('#menu-navigator').click();
 	});
 
-	afterEach(function () {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	it('Jump to element. Navigator -> Document', function() {
 		// Doubleclick several items, and check if the view is jumed to there
 		cy.cGet('#contentbox').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Comment1').dblclick();
-		cy.cGet('input#addressInput').should('have.prop', 'value', 'O81');
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'O81');
 		cy.cGet('#StatusDocPos').should('have.text', 'Sheet 3 of 24');
 
 		cy.cGet('#contentbox').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Sheet22').dblclick();
 		cy.cGet('#StatusDocPos').should('have.text', 'Sheet 22 of 24');
 
 		cy.cGet('#contentbox').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'rName1').dblclick();
-		cy.cGet('input#addressInput').should('have.prop', 'value', 'rName1');
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'rName1');
 		cy.cGet('#StatusDocPos').should('have.text', 'Sheet 2 of 24');
 
 		cy.cGet('#contentbox').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'dRange').dblclick();
-		cy.cGet('input#addressInput').should('have.prop', 'value', 'S21:T22');
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'S21:T22');
 		cy.cGet('#StatusDocPos').should('have.text', 'Sheet 3 of 24');
 	});
 
@@ -62,7 +56,7 @@ describe.skip(['tagdesktop'], 'Navigator tests.', function () {
 
 		// Check if clicking on it will move cursor there
 		cy.cGet('#contentbox').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'rName2').dblclick();
-		cy.cGet('input#addressInput').should('have.prop', 'value', 'rName2');
+		cy.cGet('input#addressInput-input').should('have.prop', 'value', 'rName2');
 		cy.cGet('#StatusDocPos').should('have.text', 'Sheet 5 of 24');
 
 		// Insert a comment

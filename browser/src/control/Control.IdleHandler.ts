@@ -22,6 +22,8 @@ declare var outOfFocusTimeoutSecs: number;
 
 /**/
 
+app.idleHandlerId = 'inactive_user_message';
+
 class IdleHandler {
     _serverRecycling: boolean = false;
     _documentIdle: boolean = false;
@@ -30,7 +32,7 @@ class IdleHandler {
 	_outOfFocusTimer: ReturnType<typeof setTimeout> = null;
     _active: boolean = true;
     map: any;
-	dimId: string = 'inactive_user_message';
+	dimId: string = app.idleHandlerId;
 
 	getIdleMessage(): string {
 		if (this.map['wopi'] && this.map['wopi'].DisableInactiveMessages) {
@@ -51,6 +53,14 @@ class IdleHandler {
 		return (Date.now() - this._lastActivity) / 1000;
 	}
 
+	refreshAnnotations() {
+		var docLayer = this.map._docLayer;
+		if (docLayer.isCalc() && docLayer.options.sheetGeometryDataEnabled) {
+			docLayer.requestSheetGeometryData();
+		}
+		app.socket.sendMessage('commandvalues command=.uno:ViewAnnotations');
+	}
+
 	_activate() {
 		window.app.console.debug('IdleHandler: _activate()');
 
@@ -66,11 +76,20 @@ class IdleHandler {
 			if (app.socket.connected()) {
 				app.socket.sendMessage('useractive');
 				this._active = true;
-				var docLayer = this.map._docLayer;
-				if (docLayer && docLayer.isCalc() && docLayer.options.sheetGeometryDataEnabled) {
-					docLayer.requestSheetGeometryData();
+
+				/*
+				  If we have the docLayer then refresh annotations now. If not then
+				  postpone until we do have the docLayer so we know if this is calc
+				  or not, because for calc we have to ensure we have the sheet
+				  geometry before requesting annotations otherwise we will lack the
+				  requirements to position them.
+				*/
+				if (this.map._docLayer) {
+					this.refreshAnnotations();
 				}
-				app.socket.sendMessage('commandvalues command=.uno:ViewAnnotations');
+				else {
+					this.map.once('doclayerinit', this.refreshAnnotations, this);
+				}
 
 				if (this.isDimActive()) {
 					this.map.jsdialog.closeDialog(this.dimId, false);
@@ -81,7 +100,12 @@ class IdleHandler {
 			}
 		}
 
-		if (window.mode.isDesktop() && !this.map.uiManager.isAnyDialogOpen()) {
+		// Ideally instead of separate isAnyEdit check here, we could check isAnyEdit inside isAnyDialogOpen,
+		// but unfortunatly that causes problem in _deactivate and unnecessary 'userinactive' message is sent
+		if (window.mode.isDesktop()
+		&& !this.map.uiManager.isAnyDialogOpen()
+		&& !cool.Comment.isAnyEdit()
+		&& $('input:focus').length === 0) {
 			this.map.focus();
 		}
 
@@ -125,6 +149,10 @@ class IdleHandler {
 	}
 
 	_dim() {
+		if (this.map.slideShowPresenter && this.map.slideShowPresenter._checkAlreadyPresenting())
+			return; // do not stop presentation
+
+		this.map.fire('closealldialogs');
 		const message = this.getIdleMessage();
 
 		window.app.console.debug('IdleHandler: _dim()');

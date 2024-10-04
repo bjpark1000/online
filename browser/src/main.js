@@ -1,4 +1,5 @@
 /* -*- js-indent-level: 8 -*- */
+
 /*
  * Copyright the Collabora Online contributors.
  *
@@ -8,9 +9,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
+
 /* global errorMessages accessToken accessTokenTTL accessHeader createOnlineModule */
 /* global app $ L host idleTimeoutSecs outOfFocusTimeoutSecs _ */
 /*eslint indent: [error, "tab", { "outerIIFEBody": 0 }]*/
+
 (function (global) {
 
 
@@ -30,7 +33,7 @@ if (window.ThisIsTheEmscriptenApp)
 else
 	var filePath = global.coolParams.get('file_path');
 
-app.file.permission = global.coolParams.get('permission') || 'edit';
+app.setPermission(global.coolParams.get('permission') || 'edit');
 
 var timestamp = global.coolParams.get('timestamp');
 var target = global.coolParams.get('target') || '';
@@ -72,6 +75,8 @@ var map = L.map('map', {
 
 map.uiManager = L.control.uiManager();
 map.addControl(map.uiManager);
+if (!L.Browser.cypressTest)
+	map.tooltip = L.control.tooltip();
 
 map.uiManager.initializeBasicUI();
 
@@ -81,9 +86,6 @@ if (wopiSrc === '' && filePath === '' && !window.ThisIsAMobileApp) {
 if (host === '' && !window.ThisIsAMobileApp) {
 	map.uiManager.showInfoModal('empty-host-url-modal', '', errorMessages.emptyhosturl, '', _('OK'), null, false);
 }
-
-if (L.Map.versionBar)
-	map.addControl(L.Map.versionBar);
 
 L.Map.THIS = map;
 app.map = map;
@@ -130,8 +132,12 @@ window.bundlejsLoaded = true;
 
 ////// Unsupported Browser Warning /////
 
-if (L.Browser.isInternetExplorer) {
-	map.uiManager.showInfoModal('browser-not-supported-modal', '', _('Warning! The browser you are using is not supported.'), '', _('OK'), null, false);
+var uaLowerCase = navigator.userAgent.toLowerCase();
+if (uaLowerCase.indexOf('msie') != -1 || uaLowerCase.indexOf('trident') != -1) {
+	map.uiManager.showInfoModal(
+		'browser-not-supported-modal', '',
+		_('Warning! The browser you are using is not supported.'),
+		'', _('OK'), null, false);
 }
 
 }(window));

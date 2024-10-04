@@ -74,6 +74,7 @@ if (ssl_flag === 'true')
     data = data.replace(/%HOST%/g, `wss://localhost:${port}`);
 else
     data = data.replace(/%HOST%/g, `ws://localhost:${port}`);
+data = data.replace(/%HEXIFY_URL%/g, '""');
 data = data.replace(/%ACCESS_TOKEN%/g, '');
 data = data.replace(/%ACCESS_TOKEN_TTL%/g, '0');
 data = data.replace(/%ACCESS_HEADER%/g, '');
@@ -83,6 +84,7 @@ data = data.replace(/%COOLWSD_VERSION%/g, 'loadjs');
 data = data.replace(/%ENABLE_WELCOME_MSG%/g, 'false');
 data = data.replace(/%AUTO_SHOW_WELCOME%/g, 'false');
 data = data.replace(/%AUTO_SHOW_FEEDBACK%/g, 'false');
+data = data.replace(/%ENABLE_UPDATE_NOTIFICATION%/g, 'false');
 data = data.replace(/%USER_INTERFACE_MODE%/g, '');
 data = data.replace(/%USE_INTEGRATION_THEME%/g, 'true');
 data = data.replace(/%ENABLE_MACROS_EXECUTION%/g, '');
@@ -91,14 +93,15 @@ data = data.replace(/%IDLE_TIMEOUT_SECS%/g, '1000000');
 data = data.replace(/%PROTOCOL_DEBUG%/g, 'true');
 data = data.replace(/%FRAME_ANCESTORS%/g, '');
 data = data.replace(/%SOCKET_PROXY%/g, 'false');
-data = data.replace(/%GROUP_DOWNLOAD_AS%/g, 'false');
 data = data.replace(/%UI_DEFAULTS%/g, '{}');
-data = data.replace(/%HEXIFY_URL%/g, '""');
 data = data.replace(/%CHECK_FILE_INFO_OVERRIDE%/g, 'false');
 data = data.replace(/%DEEPL_ENABLED%/g, 'false');
 data = data.replace(/%ZOTERO_ENABLED%/g, 'false');
+data = data.replace(/%SAVED_UI_STATE%/g, 'false');
 data = data.replace(/%WASM_ENABLED%/g, 'false');
 data = data.replace(/%INDIRECTION_URL%/g, '');
+
+data = data.replace(/%BRANDING_THEME%/g, 'cool_brand');
 
 window = new JSDOM(data, {
 				runScripts: 'dangerously',
@@ -144,7 +147,6 @@ window.createWebSocket = function(uri) {
         }
 
         if (global.socketProxy) {
-                window.socketProxy = true;
                 return new global.ProxySocket(uri);
         } else {
 		// FIXME: rejectUnauthorized: false for SSL?

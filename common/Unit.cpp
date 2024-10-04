@@ -19,8 +19,7 @@
 #include <sysexits.h>
 #include <thread>
 
-#include <Poco/JSON/Object.h>
-#include <Poco/JSON/Parser.h>
+#include "JsonUtil.hpp"
 #include <Poco/Util/LayeredConfiguration.h>
 #include <Poco/Util/Application.h>
 
@@ -54,9 +53,11 @@ std::condition_variable TimeoutConditionVariable;
 /// Controls whether experimental features/behavior is enabled or not.
 bool EnableExperimental = false;
 
-UnitBase** UnitBase::linkAndCreateUnit(UnitType type, const std::string& unitLibPath)
+UnitBase** UnitBase::linkAndCreateUnit([[maybe_unused]] UnitType type,
+                                       [[maybe_unused]] const std::string& unitLibPath)
 {
-#if !MOBILEAPP
+    if (Util::isMobileApp())
+        return nullptr;
     DlHandle = dlopen(unitLibPath.c_str(), RTLD_GLOBAL|RTLD_NOW);
     if (!DlHandle)
     {
@@ -66,6 +67,7 @@ UnitBase** UnitBase::linkAndCreateUnit(UnitType type, const std::string& unitLib
 
     // avoid std:string de-allocation during failure / exit.
     UnitLibPath = strdup(unitLibPath.c_str());
+    TST_LOG_NAME("UnitBase", "Opened unit-test lib " << UnitLibPath);
 
     const char *symbol = nullptr;
     switch (type)
@@ -118,16 +120,13 @@ UnitBase** UnitBase::linkAndCreateUnit(UnitType type, const std::string& unitLib
         LOG_ERR("No " << symbol << " symbol in " << unitLibPath);
         return nullptr;
     }
+    TST_LOG_NAME("UnitBase", "Hooked symbol " << symbol << " from unit-test lib " << UnitLibPath);
 
     UnitBase* hooks = createHooks();
     if (hooks)
         return new UnitBase* [2] { hooks, nullptr };
 
     LOG_ERR("No wsd unit-tests found in " << unitLibPath);
-#else
-    (void) type;
-    (void) unitLibPath;
-#endif
 
     return nullptr;
 }
@@ -205,15 +204,16 @@ void UnitBase::selfTest()
     GlobalTool = nullptr;
 }
 
-bool UnitBase::init(UnitType type, const std::string &unitLibPath)
+bool UnitBase::init([[maybe_unused]] UnitType type, [[maybe_unused]] const std::string& unitLibPath)
 {
-#if !MOBILEAPP
-    LOG_ASSERT(!get(type));
-#else
-    // The COOLWSD initialization is called in a loop on mobile, allow reuse
-    if (get(type))
-        return true;
-#endif
+    if (!Util::isMobileApp())
+        LOG_ASSERT(!get(type));
+    else
+    {
+        // The COOLWSD initialization is called in a loop on mobile, allow reuse
+        if (get(type))
+            return true;
+    }
 
     LOG_ASSERT(GlobalArray == nullptr);
     LOG_ASSERT(GlobalIndex == -1);
@@ -222,6 +222,9 @@ bool UnitBase::init(UnitType type, const std::string &unitLibPath)
     GlobalKit = nullptr;
     GlobalWSD = nullptr;
     GlobalTool = nullptr;
+
+    // Only in debug builds do we support tests.
+#if ENABLE_DEBUG
     if (!unitLibPath.empty())
     {
         GlobalArray = linkAndCreateUnit(type, unitLibPath);
@@ -230,6 +233,11 @@ bool UnitBase::init(UnitType type, const std::string &unitLibPath)
             // Error is logged already.
             return false;
         }
+
+        // For now enable full logging
+        // FIXME: remove this when time sensitive WOPI
+        // tests are fixed.
+        Log::setDisabledAreas("");
 
         initTestSuiteOptions();
 
@@ -272,6 +280,7 @@ bool UnitBase::init(UnitType type, const std::string &unitLibPath)
             return get(type) != nullptr;
         }
     }
+#endif // ENABLE_DEBUG
 
     // Fallback.
     switch (type)
@@ -347,6 +356,8 @@ void UnitBase::rememberInstance(UnitType type, UnitBase* instance)
 
 int UnitBase::uninit()
 {
+    // Only in debug builds do we support tests.
+#if ENABLE_DEBUG
     TST_LOG_NAME("UnitBase", "Uninitializing unit-tests: "
                                  << (GlobalResult == TestResult::Ok ? "SUCCESS" : "FAILED"));
 
@@ -384,13 +395,30 @@ int UnitBase::uninit()
     DlHandle = nullptr;
 
     return GlobalResult == TestResult::Ok ? EX_OK : EX_SOFTWARE;
+#else // ENABLE_DEBUG
+    return EX_OK; // Always success in release.
+#endif // !ENABLE_DEBUG
+}
+
+std::shared_ptr<SocketPoll> UnitBase::socketPoll()
+{
+    if (!_socketPoll)
+        _socketPoll = std::make_shared<SocketPoll>(getTestname());
+    return _socketPoll;
+}
+
+void UnitKit::postFork()
+{
+    // Don't drag wakeup pipes into the new process.
+    if (_socketPoll)
+        _socketPoll->closeAllSockets();
 }
 
 void UnitBase::initialize()
 {
     assert(DlHandle != nullptr && "Invalid handle to set");
     LOG_TST("==================== Starting [" << getTestname() << "] ====================");
-    _socketPoll->startThread();
+    socketPoll()->startThread();
 }
 
 bool UnitBase::isUnitTesting()
@@ -409,7 +437,8 @@ UnitBase::~UnitBase()
 {
     LOG_TST(getTestname() << ": ~UnitBase: " << (failed() ? "FAILED" : "SUCCESS"));
 
-    _socketPoll->joinThread();
+    if (_socketPoll)
+        _socketPoll->joinThread();
 }
 
 bool UnitBase::filterLOKitMessage(const std::shared_ptr<Message>& message)
@@ -421,7 +450,7 @@ bool UnitBase::filterSendWebSocketMessage(const char* data, const std::size_t le
                                           const WSOpCode code, const bool flush, int& unitReturn)
 {
     const std::string message(data, len);
-    if (Util::startsWith(message, "unocommandresult:"))
+    if (message.starts_with("unocommandresult:"))
     {
         const std::size_t index = message.find_first_of('{');
         if (index != std::string::npos)
@@ -458,9 +487,23 @@ bool UnitBase::filterSendWebSocketMessage(const char* data, const std::size_t le
             LOG_TST("Expected json unocommandresult. Ignoring: " << message);
         }
     }
-    else if (Util::startsWith(message, "status:"))
+    else if (message.starts_with("loaded:"))
     {
-        if (onDocumentLoaded(message))
+        if (message.find("isfirst=true") != std::string::npos)
+        {
+            // The Document loaded.
+            if (onDocumentLoaded(message))
+                return false;
+        }
+
+        // A view loaded.
+        if (onViewLoaded(message))
+            return false;
+    }
+    else if (message.starts_with("unloaded:"))
+    {
+        // A view unloaded.
+        if (onViewUnloaded(message))
             return false;
     }
     else if (message == "statechanged: .uno:ModifiedStatus=true")
@@ -473,12 +516,12 @@ bool UnitBase::filterSendWebSocketMessage(const char* data, const std::size_t le
         if (onDocumentUnmodified(message))
             return false;
     }
-    else if (Util::startsWith(message, "statechanged:"))
+    else if (message.starts_with("statechanged:"))
     {
         if (onDocumentStateChanged(message))
             return false;
     }
-    else if (Util::startsWith(message, "error:"))
+    else if (message.starts_with("error:"))
     {
         if (onDocumentError(message))
             return false;
@@ -496,8 +539,11 @@ void UnitBase::exitTest(TestResult result, const std::string& reason)
     if (isFinished())
     {
         if (result != _result)
+        {
             LOG_TST("exitTest got " << name(result) << " but is already finished with "
                                     << name(_result));
+        }
+
         return;
     }
 
@@ -518,11 +564,39 @@ void UnitBase::exitTest(TestResult result, const std::string& reason)
     }
 
     _result = result;
-    endTest(reason);
+    _reason = reason;
     _setRetValue = true;
 
-    // Notify inheritors.
-    onExitTest(result, reason);
+    // the kit needs to send a 'unitresult:' message to wsd to exit there.
+    if (_type == UnitType::Kit)
+        SocketPoll::wakeupWorld();
+
+    else // otherwise exit.
+    {
+        endTest(reason);
+
+        // Notify inheritors.
+        onExitTest(result, reason);
+    }
+}
+
+std::string UnitKit::getResultMessage() const
+{
+    assert(isFinished());
+    return std::string("unitresult: ") +
+        toStringShort(_result) + " " + _reason;
+}
+
+void UnitWSD::processUnitResult(const StringVector &tokens)
+{
+    UnitBase::TestResult result = UnitBase::TestResult::TimedOut;
+    TST_LOG("Received " << tokens[0] << " from kit:" << tokens[1] << " " << tokens[2]);
+    assert (tokens[0] == "unitresult:");
+    if (tokens[1] == "Ok")
+        result = UnitBase::TestResult::Ok;
+    else if (tokens[1] == "Failed")
+        result = UnitBase::TestResult::Failed;
+    exitTest(result, tokens[2]);
 }
 
 void UnitBase::timeout()
@@ -542,10 +616,11 @@ void UnitBase::returnValue(int& retValue)
         retValue = (_result == TestResult::Ok ? EX_OK : EX_SOFTWARE);
 }
 
-void UnitBase::endTest(const std::string& reason)
+void UnitBase::endTest([[maybe_unused]] const std::string& reason)
 {
-    LOG_TST("Ending test by stopping SocketPoll [" << _socketPoll->name() << "]: " << reason);
-    _socketPoll->joinThread();
+    LOG_TST("Ending test by stopping SocketPoll [" << getTestname() << "]: " << reason);
+    if (_socketPoll)
+        _socketPoll->joinThread();
 
     // tell the timeout thread that the work has finished
     TimeoutConditionVariable.notify_all();
@@ -558,6 +633,7 @@ void UnitBase::endTest(const std::string& reason)
 UnitWSD::UnitWSD(const std::string& name)
     : UnitBase(name, UnitType::Wsd)
     , _hasKitHooks(false)
+    , _wsd(nullptr)
 {
 }
 
@@ -646,12 +722,13 @@ void UnitWSD::onExitTest(TestResult result, const std::string&)
         if (result != TestResult::Ok && !GlobalTestOptions.getKeepgoing())
         {
             LOG_TST("Failing fast per options, even though there are more tests");
-#if !MOBILEAPP
-            LOG_TST("Setting TerminationFlag as the Test Suite failed");
-            SigUtil::setTerminationFlag(); // and wake-up world.
-#else
-            SocketPoll::wakeupWorld();
-#endif
+            if (!Util::isMobileApp())
+            {
+                LOG_TST("Setting TerminationFlag as the Test Suite failed");
+                SigUtil::setTerminationFlag(); // and wake-up world.
+            }
+            else
+                SocketPoll::wakeupWorld();
             return;
         }
 
@@ -664,12 +741,13 @@ void UnitWSD::onExitTest(TestResult result, const std::string&)
                                  << " was the last test. Finishing "
                                  << (GlobalResult == TestResult::Ok ? "SUCCESS" : "FAILED"));
 
-#if !MOBILEAPP
-    LOG_TST("Setting TerminationFlag as there are no more tests");
-    SigUtil::setTerminationFlag(); // and wake-up world.
-#else
-    SocketPoll::wakeupWorld();
-#endif
+    if (!Util::isMobileApp())
+    {
+        LOG_TST("Setting TerminationFlag as there are no more tests");
+        SigUtil::setTerminationFlag(); // and wake-up world.
+    }
+    else
+        SocketPoll::wakeupWorld();
 }
 
 UnitKit::UnitKit(const std::string& name)
@@ -681,10 +759,6 @@ UnitKit::~UnitKit() {}
 
 UnitKit& UnitKit::get()
 {
-#if MOBILEAPP
-    if (!GlobalKit)
-        GlobalKit = new UnitKit("UnitKit");
-#endif
     if (Util::isKitInProcess() && !GlobalKit)
         GlobalKit = new UnitKit("UnitKit");
 
@@ -702,12 +776,13 @@ void UnitKit::onExitTest(TestResult, const std::string&)
     //                              << " was the last test. Finishing "
     //                              << (GlobalResult == TestResult::Ok ? "SUCCESS" : "FAILED"));
 
-#if !MOBILEAPP
-    // LOG_TST("Setting TerminationFlag as there are no more tests");
-    SigUtil::setTerminationFlag(); // and wake-up world.
-#else
-    SocketPoll::wakeupWorld();
-#endif
+    if (!Util::isMobileApp())
+    {
+        // LOG_TST("Setting TerminationFlag as there are no more tests");
+        SigUtil::setTerminationFlag(); // and wake-up world.
+    }
+    else
+        SocketPoll::wakeupWorld();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

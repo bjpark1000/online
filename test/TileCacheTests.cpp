@@ -13,26 +13,29 @@
 
 #include "WebSocketSession.hpp"
 
+#include <sstream>
+#include <random>
+
 #include <Poco/Net/AcceptCertificateHandler.h>
 #include <Poco/Net/InvalidCertificateHandler.h>
 #include <Poco/Net/SSLManager.h>
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <sstream>
+#include <random>
+
 #include <Common.hpp>
 #include <Protocol.hpp>
-#include <MessageQueue.hpp>
 #include <Png.hpp>
 #include <TileCache.hpp>
 #include <kit/Delta.hpp>
 #include <Unit.hpp>
 #include <Util.hpp>
 
-#include <countcoolkits.hpp>
 #include <helpers.hpp>
 #include <test.hpp>
-#include <sstream>
-#include <random>
+#include <KitPidHelpers.hpp>
 
 using namespace helpers;
 
@@ -156,7 +159,7 @@ public:
         Poco::SharedPtr<Poco::Net::InvalidCertificateHandler> invalidCertHandler = new Poco::Net::AcceptCertificateHandler(false);
         Poco::Net::Context::Params sslParams;
         Poco::Net::Context::Ptr sslContext = new Poco::Net::Context(Poco::Net::Context::CLIENT_USE, sslParams);
-        Poco::Net::SSLManager::instance().initializeClient(nullptr, invalidCertHandler, sslContext);
+        Poco::Net::SSLManager::instance().initializeClient(nullptr, std::move(invalidCertHandler), std::move(sslContext));
 #endif
     }
 
@@ -170,7 +173,7 @@ public:
     void setUp()
     {
         resetTestStartTime();
-        testCountHowManyCoolkits();
+        waitForKitPidsReady("setUp");
         resetTestStartTime();
         _socketPoll->startThread();
     }
@@ -179,7 +182,7 @@ public:
     {
         _socketPoll->joinThread();
         resetTestStartTime();
-        testNoExtraCoolKitsLeft();
+        waitForKitPidsReady("tearDown");
         resetTestStartTime();
     }
 };
@@ -450,13 +453,14 @@ void TileCacheTests::testDisconnectMultiView()
     constexpr size_t repeat = 2;
     for (size_t j = 1; j <= repeat; ++j)
     {
-        std::string documentPath, documentURL;
-        getDocumentPathAndURL("setclientpart.ods", documentPath, documentURL, "disconnectMultiView ");
+        // Make sure previous sessions have closed
+        waitForKitPidsReady(testname);
 
         TST_LOG("disconnectMultiView try #" << j);
 
-        // Wait to clear previous sessions.
-        countCoolKitProcesses(InitialCoolKitCount);
+        std::string documentPath, documentURL;
+        getDocumentPathAndURL("setclientpart.ods", documentPath, documentURL, "disconnectMultiView ");
+
 
         // Request a huge tile, and cancel immediately.
         std::shared_ptr<http::WebSocketSession> socket1

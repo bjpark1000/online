@@ -29,8 +29,6 @@ class DelaySocket : public Socket {
     State _state;
     std::shared_ptr<DelaySocket> _dest; // our writing twin.
 
-    const size_t WindowSize = 64 * 1024;
-
     /// queued up data - sent to us by our opposite twin.
     struct WriteChunk {
     private:
@@ -45,8 +43,7 @@ class DelaySocket : public Socket {
         bool isError() const { return _data.empty(); }
         std::chrono::steady_clock::time_point getSendTime() const { return _sendTime; }
         std::vector<char>& getData() { return _data; }
-    private:
-        WriteChunk();
+        WriteChunk() = delete;
     };
 
     std::vector<std::shared_ptr<WriteChunk>> _chunks;

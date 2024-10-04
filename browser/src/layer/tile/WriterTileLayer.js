@@ -12,17 +12,15 @@
  * Writer tile layer is used to display a text document
  */
 
-/* global app */
+/* global app GraphicSelection */
 L.WriterTileLayer = L.CanvasTileLayer.extend({
 
 	newAnnotation: function (comment) {
-		if (this._map._isCursorVisible) {
-			var temp = this._latLngToTwips(this._visibleCursor.getNorthEast());
-			comment.anchorPos = [temp.x, temp.y];
-		} else if (this._graphicSelection && !this._isEmptyRectangle(this._graphicSelection)) {
+		if (app.file.textCursor.visible) {
+			comment.anchorPos = [app.file.textCursor.rectangle.x2, app.file.textCursor.rectangle.y1];
+		} else if (GraphicSelection.hasActiveSelection()) {
 			// An image is selected, then guess the anchor based on the graphic selection.
-			temp = this._latLngToTwips(this._graphicSelection.getSouthWest());
-			comment.anchorPos = [temp.x, temp.y];
+			comment.anchorPos = [GraphicSelection.rectangle.x1, GraphicSelection.rectangle.y2];
 		}
 
 		var annotation = app.sectionContainer.getSectionWithName(L.CSections.CommentList.name).add(comment);
@@ -144,8 +142,8 @@ L.WriterTileLayer = L.CanvasTileLayer.extend({
 			// of the first paragraph of the document so we want to ignore that
 			// to eliminate document jumping while reconnecting
 			this.persistCursorPositionInWriter = true;
-			this._postMouseEvent('buttondown', this.lastCursorPos.x, this.lastCursorPos.y, 1, 1, 0);
-			this._postMouseEvent('buttonup', this.lastCursorPos.x, this.lastCursorPos.y, 1, 1, 0);
+			this._postMouseEvent('buttondown', this.lastCursorPos.center[0], this.lastCursorPos.center[1], 1, 1, 0);
+			this._postMouseEvent('buttonup', this.lastCursorPos.center[0], this.lastCursorPos.center[1], 1, 1, 0);
 		}
 		if (!command.width || !command.height || this._documentInfo === textMsg)
 			return;
@@ -180,6 +178,5 @@ L.WriterTileLayer = L.CanvasTileLayer.extend({
 			docType: this._docType
 		});
 		this._resetPreFetching(true);
-		this._update();
 	},
 });

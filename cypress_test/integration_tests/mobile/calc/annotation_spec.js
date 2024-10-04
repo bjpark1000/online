@@ -1,21 +1,16 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Annotation Tests',function() {
-	var origTestFileName = 'annotation.ods';
-	var testFileName;
+	var newFilePath;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		newFilePath = helper.setupAndLoadDocument('calc/annotation.ods');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	it('Saving comment.', function() {
@@ -23,7 +18,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Annotation Tests',function(
 		cy.cGet('#comment-container-1').should('exist');
 		mobileHelper.selectHamburgerMenuItem(['File', 'Save']);
 
-		helper.reload(testFileName, 'calc', true);
+		helper.reloadDocument(newFilePath);
 		mobileHelper.enableEditingMobile();
 		mobileHelper.openCommentWizard();
 		helper.waitUntilIdle('#mobile-wizard-content', undefined);
@@ -38,7 +33,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Annotation Tests',function(
 		cy.cGet('#annotation-content-area-1').should('have.text', 'some text');
 		cy.cGet('#input-modal-input').type('modified');
 		cy.cGet('#response-ok').click();
-		cy.cGet('#tb_actionbar_item_comment_wizard').click();
+		cy.cGet('#toolbar-up #comment_wizard').click();
 		cy.cGet('#comment-container-1').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text', 'some textmodified');
 	});

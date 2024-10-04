@@ -10,9 +10,9 @@
  */
 
 #include <config.h>
-#include <config_version.h>
 
 #include "HttpHelper.hpp"
+#include "HttpRequest.hpp"
 
 #include <algorithm>
 #include <string>
@@ -33,7 +33,7 @@ void sendError(http::StatusCode errorCode, const std::shared_ptr<StreamSocket>& 
     std::ostringstream oss;
     oss << "HTTP/1.1 " << errorCode << "\r\n"
         << "Date: " << Util::getHttpTimeNow() << "\r\n"
-        << "User-Agent: " << WOPI_AGENT_STRING << "\r\n"
+        << "User-Agent: " << http::getAgentString() << "\r\n"
         << "Content-Length: " << body.size() << "\r\n"
         << extraHeader << "\r\n"
         << body;
@@ -92,9 +92,9 @@ void sendDeflatedFileContent(const std::shared_ptr<StreamSocket>& socket, const 
     }
 }
 
-void sendFileAndShutdown(const std::shared_ptr<StreamSocket>& socket, const std::string& path,
+static void sendFileImpl(const std::shared_ptr<StreamSocket>& socket, const std::string& path,
                          http::Response& response, const bool noCache,
-                         const bool deflate, const bool headerOnly)
+                         const bool deflate, const bool headerOnly, const bool closeSocket)
 {
     FileUtil::Stat st(path);
     if (st.bad())
@@ -108,7 +108,7 @@ void sendFileAndShutdown(const std::shared_ptr<StreamSocket>& socket, const std:
     {
         // 60 * 60 * 24 * 128 (days) = 11059200
         response.set("Cache-Control", "max-age=11059200");
-        response.set("ETag", "\"" COOLWSD_VERSION_HASH "\"");
+        response.set("ETag", '"' + Util::getCoolVersionHash() + '"');
     }
     else
     {
@@ -117,9 +117,9 @@ void sendFileAndShutdown(const std::shared_ptr<StreamSocket>& socket, const std:
 
     response.add("X-Content-Type-Options", "nosniff");
 
-    //Should we add the header anyway ?
-    if (headerOnly)
-        response.add("Connection", "close");
+    if ( closeSocket ) {
+        response.header().setConnectionToken(http::Header::ConnectionToken::Close);
+    }
 
     int bufferSize = std::min<std::size_t>(st.size(), Socket::MaximumSendBufferSize);
     if (static_cast<long>(st.size()) >= socket->getSendBufferSize())
@@ -151,7 +151,23 @@ void sendFileAndShutdown(const std::shared_ptr<StreamSocket>& socket, const std:
         if (!headerOnly)
             sendDeflatedFileContent(socket, path, st.size());
     }
-    socket->shutdown();
+    if(closeSocket) {
+        socket->shutdown();
+    }
+}
+
+void sendFile(const std::shared_ptr<StreamSocket>& socket, const std::string& path,
+              http::Response& response, const bool noCache,
+              const bool deflate, const bool headerOnly)
+{
+    sendFileImpl(socket, path, response, noCache, deflate, headerOnly, false);
+}
+
+void sendFileAndShutdown(const std::shared_ptr<StreamSocket>& socket, const std::string& path,
+                         http::Response& response, const bool noCache,
+                         const bool deflate, const bool headerOnly)
+{
+    sendFileImpl(socket, path, response, noCache, deflate, headerOnly, true);
 }
 
 } // namespace HttpHelper

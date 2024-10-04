@@ -11,8 +11,6 @@
 
 #pragma once
 
-#include <config.h>
-
 #include <cassert>
 #include <cerrno>
 #include <chrono>
@@ -87,6 +85,9 @@ namespace Util
 {
     namespace rng
     {
+        /// Returns a global handle to /dev/urandom - do not close it.
+        int getURandom();
+
         uint_fast64_t getSeed();
         void reseed();
         unsigned getNext();
@@ -133,14 +134,46 @@ namespace Util
         std::chrono::steady_clock::time_point _startTime;
     };
 
-#if !MOBILEAPP
-    /// Get number of threads in this process or -1 on error
-    int getProcessThreadCount();
+    /// A utility class to time using system metrics
+    class SysStopwatch
+    {
+    public:
+        SysStopwatch();
+        void restart();
+        std::chrono::microseconds elapsedTime() const;
+
+    private:
+        static void readTime(uint64_t &cpu, uint64_t &sys);
+        uint64_t _startCPU;
+        uint64_t _startSys;
+    };
+
+    class DirectoryCounter
+    {
+        void *_tasks;
+    public:
+        DirectoryCounter(const char *procPath);
+        ~DirectoryCounter();
+        /// Get number of items in this directory or -1 on error
+        int count();
+    };
+
+    /// Needs to open dirent before forking in Kit process
+    class ThreadCounter : public DirectoryCounter
+    {
+    public:
+        ThreadCounter() : DirectoryCounter("/proc/self/task") {}
+    };
+
+    /// Needs to open dirent before forking in Kit process
+    class FDCounter : public DirectoryCounter
+    {
+    public:
+        FDCounter() : DirectoryCounter("/proc/self/fd") {}
+    };
 
     /// Spawn a process.
     int spawnProcess(const std::string &cmd, const StringVector &args);
-
-#endif
 
     /// Convert unsigned char data to hex.
     /// @buffer can be either std::vector<char> or std::string.
@@ -188,14 +221,20 @@ namespace Util
         return true;
     }
 
+    /// Exception safe scope count/guard
+    struct ReferenceHolder
+    {
+        int &_count;
+        ReferenceHolder(int &count) : _count(count) { _count++; }
+        ~ReferenceHolder() { _count--; }
+    };
+
     /// Encode an integral ID into a string, with padding support.
     std::string encodeId(const std::uint64_t number, const int padding = 5);
     /// Decode an integral ID from a string.
     std::uint64_t decodeId(const std::string& str);
 
     bool windowingAvailable();
-
-#if !defined(BUILDING_TESTS) && !MOBILEAPP
 
     /// Send a message to all clients.
     void alertAllUsers(const std::string& msg);
@@ -206,40 +245,22 @@ namespace Util
     /// coolwsd for redistribution. (This function must be implemented separately in each program
     /// that uses it, it is not in Util.cpp.)
     void alertAllUsers(const std::string& cmd, const std::string& kind);
-#else
-
-    /// No-op implementation in the test programs
-    inline void alertAllUsers(const std::string&)
-    {
-    }
-
-    /// No-op implementation in the test programs
-    inline void alertAllUsers(const std::string&, const std::string&)
-    {
-    }
-#endif
 
     /// Assert that a lock is already taken.
-    template <typename T>
-    void assertIsLocked(const T& lock)
+    template <typename T> void assertIsLocked([[maybe_unused]] const T& lock)
     {
-#ifdef NDEBUG
-        (void) lock;
-#else
+#ifndef NDEBUG
         assert(lock.owns_lock());
 #endif
     }
 
-    inline void assertIsLocked(std::mutex& mtx)
+    inline void assertIsLocked([[maybe_unused]] std::mutex& mtx)
     {
-#ifdef NDEBUG
-        (void) mtx;
-#else
+#ifndef NDEBUG
         assert(!mtx.try_lock());
 #endif
     }
 
-#if !MOBILEAPP
     /// Print given number of bytes in human-understandable form (KB,MB, etc.)
     std::string getHumanizedBytes(unsigned long nBytes);
 
@@ -261,6 +282,9 @@ namespace Util
     /// Returns the process RSS in KB.
     size_t getMemoryUsageRSS(const pid_t pid);
 
+    /// Returns the number of current threads, or zero on error
+    size_t getCurrentThreadCount();
+
     /// Returns the RSS and PSS of the current process in KB.
     /// Example: "procmemstats: pid=123 rss=12400 pss=566"
     std::string getMemoryStats(FILE* file);
@@ -275,7 +299,6 @@ namespace Util
 
     /// Sets priorities for a given pid & the current thread
     void setProcessAndThreadPriorities(const pid_t pid, int prio);
-#endif
 
     /// Replace substring @a in string @s with string @b.
     std::string replace(std::string s, const std::string& a, const std::string& b);
@@ -295,19 +318,24 @@ namespace Util
     long getThreadId();
 #endif
 
-    /// Get version information
+    void killThreadById(int tid, int signal);
+
+    /// Returns the COOL Version number string.
+    std::string getCoolVersion();
+
+    /// Returns the COOL Version Hash string.
+    std::string getCoolVersionHash();
+
+    /// Get version information, that is, both version and hash.
     void getVersionInfo(std::string& version, std::string& hash);
 
     ///< A random hex string that identifies the current process.
     const std::string& getProcessIdentifier();
 
-    std::string getVersionJSON(bool enableExperimental);
+    std::string getVersionJSON(bool enableExperimental, const std::string& timezone);
 
     /// Return a string that is unique across processes and calls.
     std::string UniqueId();
-
-    // Extract all json entries into a map.
-    std::map<std::string, std::string> JsonToMap(const std::string& jsonString);
 
     inline unsigned short hexFromByte(unsigned char byte)
     {
@@ -613,30 +641,6 @@ namespace Util
     inline std::string trimmed(const char* s)
     {
         return trimmed(std::string(s));
-    }
-
-    /// Return true iff s starts with t.
-    inline bool startsWith(const std::string& s, const std::string& t)
-    {
-        return s.length() >= t.length() && memcmp(s.c_str(), t.c_str(), t.length()) == 0;
-    }
-
-    /// Return true iff s starts with t.
-    inline bool startsWith(const std::string& s, const char* t)
-    {
-        if (t != nullptr && !s.empty())
-        {
-            const size_t len = std::strlen(t);
-            return s.length() >= len && memcmp(s.c_str(), t, len) == 0;
-        }
-
-        return false;
-    }
-
-    /// Return true iff s ends with t.
-    inline bool endsWith(const std::string& s, const std::string& t)
-    {
-        return equal(t.rbegin(), t.rend(), s.rbegin());
     }
 
 #ifdef IOS
@@ -1090,20 +1094,8 @@ int main(int argc, char**argv)
     /// For now just a basic sanity check, can be extended if necessary.
     bool isValidURIHost(const std::string& host);
 
-    /// Encode a URI with the JS-compatible reserved characters.
-    std::string encodeURIComponent(const std::string& uri,
-                                   const std::string& reserved = ",/?:@&=+$#");
-
-    /// Decode a URI encoded with encodeURIComponent.
-    std::string decodeURIComponent(const std::string& uri);
-
-    /// Checks whether or not the given string is encoded.
-    /// That is, a string that is identical when encoded
-    /// will return false. Similarly, a string that is
-    /// already encoded will return false.
-    /// Optionally takes a string of reserved characters
-    /// to escape while encoding.
-    bool needsURIEncoding(const std::string& uri, const std::string& reserved = ",/?:@&=+$#");
+    /// Remove all but scheme://hostname:port/ from a URI.
+    std::string trimURI(const std::string& uri);
 
     /// Cleanup a filename replacing anything potentially problematic
     /// either for a URL or for a file path
@@ -1122,9 +1114,6 @@ int main(int argc, char**argv)
 
     /// Anonymize the basename of filenames only, preserving the path and extension.
     std::string anonymizeUrl(const std::string& url, const std::uint64_t nAnonymizationSalt);
-
-    /// Extract and return the filename given a url or path.
-    std::string getFilenameFromURL(const std::string& url);
 
     /// Return true if the subject matches in given set. It uses regex
     /// Mainly used to match WOPI hosts patterns
@@ -1249,6 +1238,57 @@ int main(int argc, char**argv)
         }
     };
 
+    /// Simple backtrace capture
+    /// Use case, e.g. streaming up to 20 frames to log: `LOG_TRC( Util::Backtrace::get(20) );`
+    /// Enabled for !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    /// Using
+    /// - <https://www.man7.org/linux/man-pages/man3/backtrace.3.html>
+    /// - <https://gcc.gnu.org/onlinedocs/libstdc++/manual/ext_demangling.html>
+    class Backtrace
+    {
+    public:
+        struct Symbol
+        {
+            std::string blob;
+            std::string mangled;
+            std::string offset;
+            std::string demangled;
+            std::string toString() const;
+            std::string toMangledString() const;
+            bool isDemangled() const { return !demangled.empty(); }
+        };
+
+    private:
+        int skipFrames;
+        /// Stack frames {address, symbol}
+        std::vector<std::pair<void*, Symbol>> _frames;
+
+        static bool separateRawSymbol(const std::string& raw, Symbol& s);
+
+    public:
+        /// Produces a backtrace instance from current stack position
+        Backtrace(const int maxFrames = 50, const int skip = 1);
+
+        /// Produces a backtrace instance from current stack position
+        static Backtrace get(const int maxFrames = 50, const int skip = 2)
+        {
+            Backtrace bt(maxFrames, skip);
+            return bt;
+        }
+
+        /// Sends captured backtrace to given ostream
+        std::ostream& send(std::ostream& os) const;
+
+        /// Produces a string representation, one line per frame
+        std::string toString() const;
+
+        /* constexpr */ size_t size() const { return _frames.size(); }
+        /* constexpr */ const Symbol& operator[](size_t idx) const
+        {
+            return _frames[idx].second;
+        }
+    };
+
     //// Return current time in HTTP format.
     std::string getHttpTimeNow();
 
@@ -1329,6 +1369,8 @@ int main(int argc, char**argv)
      */
     bool isFuzzing();
 
+    bool isMobileApp();
+
     void setKitInProcess(bool value);
     bool isKitInProcess();
 
@@ -1361,10 +1403,8 @@ int main(int argc, char**argv)
      */
     std::map<std::string, std::string> stringVectorToMap(const std::vector<std::string>& strvector, const char delimiter);
 
-#if !MOBILEAPP
     // If OS is not mobile, it must be Linux.
     std::string getLinuxVersion();
-#endif
 
     /// Convert a string to 32-bit signed int.
     /// Returns the parsed value and a boolean indicating success or failure.
@@ -1433,12 +1473,6 @@ int main(int argc, char**argv)
     inline bool iequal(const std::string& lhs, const std::string& rhs)
     {
         return iequal(lhs.c_str(), lhs.size(), rhs.c_str(), rhs.size());
-    }
-
-    /// Get system_clock now in milliseconds.
-    inline int64_t getNowInMS()
-    {
-        return std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
     }
 
     /// Convert a vector to a string. Useful for conversion in templates.
@@ -1530,6 +1564,9 @@ int main(int argc, char**argv)
      */
     int safe_atoi(const char* p, int len);
 
+    /// Sleep based on count of seconds in env. var
+    void sleepFromEnvIfSet(const char *domain, const char *envVar);
+
     /// Close logs and forcefully exit with the given exit code.
     /// This calls std::_Exit, which terminates the program without cleaning up
     /// static instances (i.e. anything registered with `atexit' or `on_exit').
@@ -1549,5 +1586,7 @@ inline std::ostream& operator<<(std::ostream& os, const std::chrono::system_cloc
     os << Util::getIso8601FracformatTime(ts);
     return os;
 }
+
+inline std::ostream& operator<<(std::ostream& os, const Util::Backtrace& bt) { return bt.send(os); }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

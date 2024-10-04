@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require afterEach expect */
+/* global describe it cy beforeEach require expect */
 
 var helper = require('../../common/helper');
 var searchHelper = require('../../common/search_helper');
@@ -6,30 +6,24 @@ var mobileHelper = require('../../common/mobile_helper');
 var impressHelper = require('../../common/impress_helper');
 
 describe.skip('Searching via search bar.', function() {
-	var origTestFileName = 'search_bar.odp';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'impress');
+		helper.setupAndLoadDocument('impress/search_bar.odp');
 
 		mobileHelper.enableEditingMobile();
 
 		searchHelper.showSearchBar();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	it('Search existing word.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 
 		searchHelper.searchNext();
 
 		// A shape and some text should be selected
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.get('.leaflet-selection-marker-start')
+		cy.get('.text-selection-handle-start')
 			.should('be.visible');
 
 		helper.expectTextForClipboard('a');
@@ -44,7 +38,7 @@ describe.skip('Searching via search bar.', function() {
 
 		helper.textSelectionShouldExist();
 
-		searchHelper.tpyeIntoSearchField('q');
+		searchHelper.typeIntoSearchField('q');
 
 		searchHelper.searchNext();
 
@@ -52,14 +46,14 @@ describe.skip('Searching via search bar.', function() {
 	});
 
 	it('Search next / prev instance.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 
 		searchHelper.searchNext();
 
 		// A shape and some text should be selected
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('be.visible');
 
 		helper.getCursorPos('left', 'cursorOrigLeft');
 
@@ -70,7 +64,7 @@ describe.skip('Searching via search bar.', function() {
 
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('be.visible');
 
 		helper.expectTextForClipboard('a');
 
@@ -87,7 +81,7 @@ describe.skip('Searching via search bar.', function() {
 
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('be.visible');
 
 		helper.expectTextForClipboard('a');
 
@@ -101,14 +95,14 @@ describe.skip('Searching via search bar.', function() {
 	});
 
 	it('Search at the document end.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 
 		searchHelper.searchNext();
 
 		// A shape and some text should be selected
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.get('.leaflet-selection-marker-start')
+		cy.get('.text-selection-handle-start')
 			.should('be.visible');
 
 		helper.expectTextForClipboard('a');
@@ -120,7 +114,7 @@ describe.skip('Searching via search bar.', function() {
 
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('be.visible');
 
 		helper.expectTextForClipboard('a');
 
@@ -137,7 +131,7 @@ describe.skip('Searching via search bar.', function() {
 
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('be.visible');
 
 		helper.expectTextForClipboard('a');
 
@@ -151,13 +145,13 @@ describe.skip('Searching via search bar.', function() {
 	});
 
 	it('Cancel search.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 
 		searchHelper.searchNext();
 
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('be.visible');
 
 		helper.expectTextForClipboard('a');
 
@@ -165,18 +159,18 @@ describe.skip('Searching via search bar.', function() {
 		searchHelper.cancelSearch();
 
 		cy.cGet('.transform-handler--rotate').should('not.exist');
-		cy.cGet('.leaflet-selection-marker-start').should('not.exist');
+		cy.cGet('.text-selection-handle-start').should('not.exist');
 		cy.cGet('input#search-input').should('be.visible');
 	});
 
 	it('Close search.', function() {
-		searchHelper.tpyeIntoSearchField('a');
+		searchHelper.typeIntoSearchField('a');
 
 		searchHelper.searchNext();
 
 		//cy.get('.transform-handler--rotate')
 		//	.should('be.not.visible');
-		cy.cGet('.leaflet-selection-marker-start').should('be.visible');
+		cy.cGet('.text-selection-handle-start').should('be.visible');
 
 		helper.expectTextForClipboard('a');
 

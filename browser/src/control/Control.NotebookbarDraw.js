@@ -173,9 +173,10 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 		if (!this._map['wopi'].UserCanNotWriteRelative) {
 			content.push(
 				{
-					'id': 'exportas',
+					'id': 'exportas:ExportAsMenu',
+					'command': 'exportas',
 					'class': 'unoexportas',
-					'type': 'bigmenubartoolitem',
+					'type': 'exportmenubutton',
 					'text': _('Export As'),
 					'accessibility': { focusBack: true, combination: 'EA', de: null }
 				}
@@ -225,29 +226,13 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 		}
 
 		if (!this._map['wopi'].HideExportOption) {
-			content.push(
-			{
-				'id': 'file-downloadas-odg-downloadas-png',
-				'type': 'container',
-				'children': [
-					{
-						'id': 'downloadas-odg',
-						'class': 'unodownloadas-odg',
-						'type': 'menubartoolitem',
-						'text': _('ODF Drawing (.odg)'),
-						'command': '',
-						'accessibility': { focusBack: true, combination: 'DO', de: null }
-					},
-					{
-						'id': 'downloadas-png',
-						'class': 'unodownloadas-png',
-						'type': 'menubartoolitem',
-						'text': _('Image (.png)'),
-						'command': '',
-						'accessibility': { focusBack: true, combination: 'DP', de: null }
-					},
-				],
-				'vertical': 'true'
+			content.push({
+				'id': 'downloadas:DownloadAsMenu',
+				'command': 'downloadas',
+				'class': 'unodownloadas',
+				'type': 'exportmenubutton',
+				'text': _('Download'),
+				'accessibility': { focusBack: true, combination: 'DA', de: null }
 			});
 		}
 
@@ -287,9 +272,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 					{
 						'id': 'repair',
 						'class': 'unorepair',
-						'type': 'bigtoolitem',
+						'type': 'bigcustomtoolitem',
 						'text': _('Repair'),
-						'command': _('Repair'),
 						'accessibility': { focusBack: true, combination: 'RF', de: null }
 					}
 				]
@@ -344,9 +328,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 			{
 				'id': 'zoomreset',
 				'class': 'unozoomreset',
-				'type': 'menubartoolitem',
+				'type': 'bigcustomtoolitem',
 				'text': _('Reset zoom'),
-				'command': _('Reset zoom'),
 				'accessibility': { focusBack: true, combination: 'RZ', de: null }
 			},
 			{
@@ -358,9 +341,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 							{
 								'id': 'zoomout',
 								'class': 'unozoomout',
-								'type': 'menubartoolitem',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:ZoomMinus'),
-								'command': '.uno:ZoomMinus',
 								'accessibility': { focusBack: true, combination: 'ZO', de: null }
 							}
 						]
@@ -371,9 +353,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 							{
 								'id': 'zoomin',
 								'class': 'unozoomin',
-								'type': 'menubartoolitem',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:ZoomPlus'),
-								'command': '.uno:ZoomPlus',
 								'accessibility': { focusBack: true, combination: 'ZI', de: null }
 							}
 						]
@@ -384,9 +365,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 			{
 				'id': 'toggleuimode',
 				'class': 'unotoggleuimode',
-				'type': 'bigmenubartoolitem',
+				'type': 'bigcustomtoolitem',
 				'text': _('Compact view'),
-				'command': _('Toggle UI Mode'),
 				'accessibility': { focusBack: true, combination: 'UI', de: null }
 			},
 			{
@@ -396,10 +376,11 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'collapsenotebookbar',
-								'type': 'menubartoolitem',
-								'text': _('Collapse Tabs'),
-								'accessibility': { focusBack: true, combination: 'CN', de: null }
+								'id': 'showruler',
+								'class': 'unoshowruler',
+								'type': 'customtoolitem',
+								'text': _('Ruler'),
+								'accessibility': { focusBack: true, combination: 'R', de: 'L' }
 							}
 						]
 					},
@@ -409,10 +390,9 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 							{
 								'id': 'showstatusbar',
 								'class': 'unoshowstatusbar',
-								'type': 'menubartoolitem',
+								'type': 'customtoolitem',
 								'text': _('Status Bar'),
-								'command': _('Show Status Bar'),
-								'accessibility': { focusBack: true, combination: 'SS', de: null }
+								'accessibility': { focusBack: true, combination: 'SB', de: null }
 							}
 						]
 					}
@@ -420,11 +400,25 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 				'vertical': 'true'
 			},
 			{
+				'id': 'collapsenotebookbar',
+				'class': 'unocollapsenotebookbar',
+				'type': 'bigcustomtoolitem',
+				'text': _('Collapse Tabs'),
+				'accessibility': { focusBack: true, combination: 'CU', de: null }
+			},
+			{
 				'id':'toggledarktheme',
-				'type': 'bigmenubartoolitem',
+				'type': 'bigcustomtoolitem',
 				'text': _('Dark Mode'),
 				'accessibility': { focusBack: true, combination: 'DT', de: null }
 			},
+			{
+                'id':'invertbackground',
+                'class': 'unoinvertbackground',
+                'type': 'bigcustomtoolitem',
+                'text': _('Invert Background'),
+                'accessibility': { focusBack: true, combination: 'DT', de: null }
+            },
 			{
 				'id': 'view-sidebar',
 				'type': 'bigtoolitem',
@@ -468,8 +462,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 				'vertical': 'true'
 			},
 			{
-				'id': 'home-paste',
-				'type': 'bigtoolitem',
+				'id': 'home-paste:PasteMenu',
+				'type': 'menubutton',
 				'text': _UNO('.uno:Paste'),
 				'command': '.uno:Paste',
 				'accessibility': { focusBack: true, combination: 'V', de: null }
@@ -482,7 +476,7 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'children': [
 							{
 								'id': 'home-cut',
-								'type': 'toolitem',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:Cut'),
 								'command': '.uno:Cut',
 								'accessibility': { focusBack: true, combination: 'X', de: null }
@@ -501,7 +495,7 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'children': [
 							{
 								'id': 'home-copy',
-								'type': 'toolitem',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:Copy'),
 								'command': '.uno:Copy',
 								'accessibility': { focusBack: true, combination: 'C', de: null }
@@ -621,15 +615,17 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 										'accessibility': { focusBack: true, combination: 'FW', de: null }
 									},
 									{
-										'id': 'home-char-back-color',
-										'class': 'unospan-BackColor',
+										'id': 'home-char-back-color:ColorPickerMenu',
+										'noLabel': true,
+										'class': 'unospan-CharBackColor',
 										'type': 'toolitem',
 										'text': _UNO('.uno:CharBackColor'),
 										'command': '.uno:CharBackColor',
 										'accessibility': { focusBack: true, combination: 'BC', de: null }
 									},
 									{
-										'id': 'home-color',
+										'id': 'home-color:ColorPickerMenu',
+										'noLabel': true,
 										'class': 'unospan-FontColor',
 										'type': 'toolitem',
 										'text': _UNO('.uno:Color'),
@@ -793,11 +789,12 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 										'accessibility': { focusBack: true, combination: 'SD', de: null }
 									},
 									{
-										'id': 'home-line-spacing',
-										'type': 'toolitem',
+										'id': 'home-line-spacing:LineSpacingMenu',
+										'type': 'menubutton',
+										'noLabel': true,
 										'text': _UNO('.uno:LineSpacing'),
 										'command': '.uno:LineSpacing',
-										'accessibility': { focusBack: true, combination: 'LS', de: null }
+										'accessibility': { focusBack: false, combination: 'LS', de: null }
 									},
 									{
 										'id': 'home-para-right-to-left',
@@ -829,8 +826,9 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'home-basic-shapes',
-								'type': 'toolitem',
+								'id': 'home-basic-shapes:InsertShapesMenu',
+								'type': 'menubutton',
+								'noLabel': true,
 								'text': _('Shapes'),
 								'command': '.uno:BasicShapes',
 								'accessibility': { focusBack: true, combination: 'IS', de: null }
@@ -842,8 +840,9 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'home-connector-toolbox',
-								'type': 'toolitem',
+								'id': 'home-connector-toolbox:InsertConnectorsMenu',
+								'type': 'menubutton',
+								'noLabel': true,
 								'text': _UNO('.uno:ConnectorToolbox', 'presentation'),
 								'command': '.uno:ConnectorToolbox',
 								'accessibility': { focusBack: true, combination: 'TC', de: null }
@@ -860,7 +859,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'home-xline-color',
+								'id': 'home-xline-color:ColorPickerMenu',
+								'noLabel': true,
 								'class': 'unospan-XLineColor',
 								'type': 'toolitem',
 								'text': _UNO('.uno:XLineColor'),
@@ -873,7 +873,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'home-fill-color',
+								'id': 'home-fill-color:ColorPickerMenu',
+								'noLabel': true,
 								'class': 'unospan-BackgroundColor',
 								'type': 'toolitem',
 								'text': _UNO('.uno:FillColor'),
@@ -892,8 +893,9 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'home-insert-graphic',
-								'type': 'toolitem',
+								'id': 'home-insert-graphic:InsertImageMenu',
+								'type': 'menubutton',
+								'noLabel': true,
 								'text': _UNO('.uno:InsertGraphic'),
 								'command': '.uno:InsertGraphic',
 								'accessibility': { focusBack: true, combination: 'IG', de: null }
@@ -925,8 +927,9 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 								'accessibility': { focusBack: true, combination: 'IC', de: null }
 							},
 							{
-								'id': 'home-insert-table',
-								'type': 'toolitem',
+								'id': 'home-insert-table:InsertTableMenu',
+								'type': 'menubutton',
+								'noLabel': true,
 								'text': _UNO('.uno:InsertTable', 'presentation'),
 								'command': '.uno:InsertTable',
 								'accessibility': { focusBack: true, combination: 'IT', de: null }
@@ -945,9 +948,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 								{
 									'id': 'home-search',
 									'class': 'unoSearch',
-									'type': 'menubartoolitem',
+									'type': 'customtoolitem',
 									'text': _('Search'),
-									'command': _('Show Status Bar'),
 									'accessibility': { focusBack: false,	combination: 'SS',	de: 'SS' }
 								}
 							]
@@ -1016,9 +1018,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 							{
 								'id': 'selectbackground',
 								'class': 'unoselectbackground',
-								'type': 'menubartoolitem',
+								'type': 'customtoolitem',
 								'text': _UNO('.uno:SelectBackground', 'presentation'),
-								'command': '',
 								'accessibility': { focusBack: true, combination: 'SB', de: null }
 							}
 						]
@@ -1187,8 +1188,8 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 				'vertical': 'true'
 			},
 			{
-				'id': 'insert-insert-graphic',
-				'type': 'bigtoolitem',
+				'id': 'insert-insert-graphic:InsertImageMenu',
+				'type': 'menubutton',
 				'text': _UNO('.uno:InsertGraphic'),
 				'command': '.uno:InsertGraphic',
 				'accessibility': { focusBack: true, combination: 'IG', de: null }
@@ -1200,8 +1201,9 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'insert-insert-table',
-								'type': 'toolitem',
+								'id': 'insert-insert-table:InsertTableMenu',
+								'type': 'menubutton',
+								'noLabel': true,
 								'text': _UNO('.uno:InsertTable', 'presentation'),
 								'command': '.uno:InsertTable',
 								'accessibility': { focusBack: true, combination: 'IT', de: null }
@@ -1318,8 +1320,9 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'insert-basic-shapes',
-								'type': 'toolitem',
+								'id': 'insert-basic-shapes:InsertShapesMenu',
+								'type': 'menubutton',
+								'noLabel': true,
 								'text': _('Shapes'),
 								'command': '.uno:BasicShapes',
 								'accessibility': { focusBack: true, combination: 'BS', de: null }
@@ -1459,6 +1462,35 @@ L.Control.NotebookbarDraw = L.Control.NotebookbarImpress.extend({
 				'text': _UNO('.uno:TransformDialog'),
 				'command': '.uno:TransformDialog',
 				'accessibility': { focusBack: true, combination: 'TD', de: null }
+			},
+			{
+				'id': 'format-name-description',
+				'type': 'container',
+				'children': [
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'type': 'toolitem',
+								'text': _UNO('.uno:NameGroup', 'text'),
+								'command': '.uno:NameGroup',
+								'accessibility': { focusBack: false, combination: 'NG', de: null }
+							}
+						]
+					},
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'type': 'toolitem',
+								'text': _UNO('.uno:ObjectTitleDescription', 'text'),
+								'command': '.uno:ObjectTitleDescription',
+								'accessibility': { focusBack: false, combination: 'DS', de: null }
+							}
+						]
+					}
+				],
+				'vertical': 'true'
 			},
 			{
 				'id': 'format-theme-dialog',

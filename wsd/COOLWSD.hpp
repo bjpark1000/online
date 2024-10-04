@@ -40,7 +40,7 @@ class DocumentBroker;
 class ClipboardCache;
 class FileServerRequestHandler;
 
-std::shared_ptr<ChildProcess> getNewChild_Blocks(unsigned mobileAppDocId);
+std::shared_ptr<ChildProcess> getNewChild_Blocks(SocketPoll &destPoll, unsigned mobileAppDocId);
 
 // A WSProcess object in the WSD process represents a descendant process, either the direct child
 // process ForKit or a grandchild Kit process, with which the WSD process communicates through a
@@ -198,13 +198,13 @@ public:
 
 protected:
     std::shared_ptr<WebSocketHandler> getWSHandler() const { return _ws; }
-    std::shared_ptr<StreamSocket> getSocket() const { return _socket; };
+    std::shared_ptr<StreamSocket> getSocket() const { return _socket.lock(); };
 
 private:
     std::string _name;
     std::atomic<pid_t> _pid; //< The process-id, which can be access from different threads.
-    std::shared_ptr<WebSocketHandler> _ws;
-    std::shared_ptr<StreamSocket> _socket;
+    std::shared_ptr<WebSocketHandler> _ws;  // FIXME: should be weak ? ...
+    std::weak_ptr<StreamSocket> _socket;
 };
 
 #if !MOBILEAPP
@@ -236,7 +236,8 @@ public:
 
 /// The Server class which is responsible for all
 /// external interactions.
-class COOLWSD final : public Poco::Util::ServerApplication
+class COOLWSD final : public Poco::Util::ServerApplication,
+                      public UnitWSDInterface
 {
 public:
     COOLWSD();
@@ -275,11 +276,13 @@ public:
     static std::string LOKitVersion;
     static bool EnableTraceEventLogging;
     static bool EnableAccessibility;
+    static bool EnableMountNamespaces;
     static FILE *TraceEventFile;
     static void writeTraceEventRecording(const char *data, std::size_t nbytes);
     static void writeTraceEventRecording(const std::string &recording);
     static std::string LogLevel;
     static std::string LogLevelStartup;
+    static std::string LogDisabledAreas;
     static std::string LogToken;
     static std::string MostVerboseLogLevelSettableFromClient;
     static std::string LeastVerboseLogLevelSettableFromClient;
@@ -289,6 +292,8 @@ public:
     static bool IsProxyPrefixEnabled;
     static std::atomic<unsigned> NumConnections;
     static std::unique_ptr<TraceFileWriter> TraceDumper;
+    static bool IndirectionServerEnabled;
+    static bool GeolocationSetup;
 #if !MOBILEAPP
     static std::unique_ptr<ClipboardCache> SavedClipboards;
 
@@ -300,7 +305,7 @@ public:
     {
         Disabled,
         Enabled
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
         ,
         Forced //< When Forced, only WASM is served.
 #endif
@@ -314,9 +319,9 @@ public:
 #endif
 
     static std::unordered_set<std::string> EditFileExtensions;
-    static std::unordered_set<std::string> ViewWithCommentsFileExtensions;
     static unsigned MaxConnections;
     static unsigned MaxDocuments;
+    static std::string HardwareResourceWarning;
     static std::string OverrideWatermark;
     static std::set<const Poco::Util::AbstractConfiguration*> PluginConfigurations;
     static std::chrono::steady_clock::time_point StartTime;
@@ -339,10 +344,17 @@ public:
 
     // Return a map for fast searches. Used in testing and in admin for cleanup
     static std::set<pid_t> getKitPids();
+    static std::set<pid_t> getSpareKitPids();
+    static std::set<pid_t> getDocKitPids();
 
     static std::string GetConnectionId()
     {
         return Util::encodeId(NextConnectionId++, 3);
+    }
+
+    static const std::string& getHardwareResourceWarning()
+    {
+        return HardwareResourceWarning;
     }
 
     static bool isSSLEnabled()
@@ -370,28 +382,13 @@ public:
     {
         std::string lowerCaseExtension = extension;
         std::transform(lowerCaseExtension.begin(), lowerCaseExtension.end(), lowerCaseExtension.begin(), ::tolower);
-#if MOBILEAPP
-        if (lowerCaseExtension == "pdf")
-            return true; // true for only pdf - it is not editable
-        return false; // mark everything else editable on mobile
-#else
-            return EditFileExtensions.find(lowerCaseExtension) == EditFileExtensions.end();
-#endif
-    }
-
-    /// Return true if extension is marked as view_comment action in discovery.xml.
-    static bool IsViewWithCommentsFileExtension(const std::string& extension)
-    {
-
-        std::string lowerCaseExtension = extension;
-        std::transform(lowerCaseExtension.begin(), lowerCaseExtension.end(), lowerCaseExtension.begin(), ::tolower);
-#if MOBILEAPP
-        if (lowerCaseExtension == "pdf")
-            return true; // true for only pdf - it is not editable
-        return false; // mark everything else editable on mobile
-#else
-        return ViewWithCommentsFileExtensions.find(lowerCaseExtension) != ViewWithCommentsFileExtensions.end();
-#endif
+        if (Util::isMobileApp())
+        {
+            if (lowerCaseExtension == "pdf")
+                return true; // true for only pdf - it is not editable
+            return false; // mark everything else editable on mobile
+        }
+        return EditFileExtensions.find(lowerCaseExtension) == EditFileExtensions.end();
     }
 
     /// Returns the value of the specified application configuration,
@@ -513,7 +510,8 @@ public:
     }
     static void alertAllUsersInternal(const std::string& msg);
     static void alertUserInternal(const std::string& dockey, const std::string& msg);
-
+    static void setMigrationMsgReceived(const std::string& docKey);
+    static void setAllMigrationMsgReceived();
 
 #if ENABLE_DEBUG
     /// get correct server URL with protocol + port number for this running server
@@ -556,7 +554,8 @@ private:
 #endif
 
 #if !MOBILEAPP
-    void processFetchUpdate();
+    void processFetchUpdate(SocketPoll& poll);
+    static void setupChildRoot(const bool UseMountNamespaces);
 #endif
     void initializeSSL();
     void displayHelp();
@@ -647,6 +646,9 @@ private:
     static void appendAllowedAliasGroups(Poco::Util::LayeredConfiguration& conf, std::vector<std::string>& allowed);
 
 private:
+    /// UnitWSDInterface
+    virtual std::string getJailRoot(int pid) override;
+
     /// Settings passed from the command-line to override those in the config file.
     std::map<std::string, std::string> _overrideSettings;
 
@@ -658,8 +660,6 @@ public:
 
 void setKitInProcess();
 
-#if !MOBILEAPP
 int createForkit(const std::string& forKitPath, const StringVector& args);
-#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

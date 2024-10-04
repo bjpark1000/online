@@ -1,19 +1,14 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 // var desktopHelper = require('../../common/desktop_helper');
 var ceHelper = require('../../common/contenteditable_helper');
 
 describe(['taga11yenabled'], 'Table accessibility', function() {
-	var testFileName = 'table_accessibility.odt';
 
 	beforeEach(function () {
-		helper.beforeAll(testFileName, 'writer');
+		helper.setupAndLoadDocument('writer/table_accessibility.odt');
 		cy.cGet('div.clipboard').as('clipboard');
-	});
-
-	afterEach(function () {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function checkCellDescription(expectedDescription) {

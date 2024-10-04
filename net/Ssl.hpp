@@ -31,7 +31,6 @@ namespace ssl
 enum class CertificateVerification
 {
     Disabled, //< No verification is performed or results ignored.
-    IfProvided, //< Verified if an optional certificate is provided.
     Required //< Certificate must be provided and will be verified.
 };
 } // namespace ssl
@@ -108,6 +107,12 @@ public:
                "Cannot initialize the client context more than once");
         ClientInstance = std::make_unique<SslContext>(certFilePath, keyFilePath, caFilePath,
                                                       cipherList, verification);
+    }
+
+    static ssl::CertificateVerification getClientVerification()
+    {
+        assert(isClientContextInitialized() && "client context must be initialized");
+        return ClientInstance->verification();
     }
 
     static void uninitializeClientContext() { ClientInstance.reset(); }

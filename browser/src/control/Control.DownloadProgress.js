@@ -31,21 +31,11 @@ L.Control.DownloadProgress = L.Control.extend({
 	},
 
 	_userAlreadyWarned: function () {
-		var itemKey = this.options.userWarningKey;
-		var storage = localStorage;
-		if (storage && !storage.getItem(itemKey)) {
-			return false;
-		} else if (!storage)
-			return false;
-
-		return true;
+		return window.prefs.getBoolean(this.options.userWarningKey);
 	},
 
 	_setUserAlreadyWarned: function () {
-		var itemKey = this.options.userWarningKey;
-		var storage = localStorage;
-		if (storage && !storage.getItem(itemKey))
-			storage.setItem(itemKey, '1');
+		window.prefs.set(this.options.userWarningKey, true);
 	},
 
 	_getDialogTitle: function () {
@@ -54,7 +44,7 @@ L.Control.DownloadProgress = L.Control.extend({
 
 	_getLargeCopyPasteMessage: function () {
 		return this._map._clip._substProductName(
-			_('If you want to share large elements outside of %productName it\'s necessary to first download them.'));
+			_('If you want to share large elements outside of {productname} it\'s necessary to first download them.'));
 	},
 
 	_getDownloadProgressDialogId: function () {
@@ -148,7 +138,8 @@ L.Control.DownloadProgress = L.Control.extend({
 				e.preventDefault();
 			}
 		};
-		document.getElementById(eventTargetId).onkeydown = keyDownCallback.bind(this);
+		if (document.getElementById(eventTargetId))
+			document.getElementById(eventTargetId).onkeydown = keyDownCallback.bind(this);
 	},
 
 	setupKeyboardShortcutForDialog: function (modalId) {
@@ -302,10 +293,8 @@ L.Control.DownloadProgress = L.Control.extend({
 				reader.onload = function() {
 					var text = reader.result;
 					window.app.console.log('async clipboard parse done: ' + text.substring(0, 256));
-					var idx = text.indexOf('<!DOCTYPE HTML');
-					if (idx > 0)
-						text = text.substring(idx, text.length);
-					that._map._clip.setTextSelectionHTML(text);
+					let result = that._map._clip.parseClipboard(text);
+					that._map._clip.setTextSelectionHTML(result['html'], result['plain']);
 				};
 				// TODO: failure to parse ? ...
 				reader.readAsText(response);

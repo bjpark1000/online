@@ -2,13 +2,14 @@
 	margin: 0;
 	padding: 0;
 	position: relative;
-	height: 39px;
+	height: 38px;
 	overflow: hidden;
 	width: 100%;
 	white-space: nowrap;
 	text-align: start;
 	background-color: transparent;
 	vertical-align: middle;
+	align-content: center;
 }
 
 .spreadsheet-tab-scroll {
@@ -16,17 +17,25 @@
 	height: 100%;
 	overflow-y: hidden;
 	overflow-x: auto;
+	scrollbar-width: none; /* Firefox */
+	-ms-overflow-style: none; /* IE and Edge */
 	margin-left: 6px;
 }
 
+.spreadsheet-tab-scroll::-webkit-scrollbar {
+	display: none;
+}
+
 .spreadsheet-tab {
-	margin: 5px 0px 0px !important;
+	margin: 0 !important;
 	padding: 6px 9px 4px !important;
 	text-decoration: none;
 
 	font: var(--default-font-size)/1.5 var(--cool-font);
 	display: inline-grid;
 	grid-auto-flow: column;
+	justify-content: center;
+	align-items: center;
 	border: 1px solid transparent;
 	border-radius: var(--border-radius);
 	background: var(--color-main-background);
@@ -42,7 +51,7 @@
 .spreadsheet-tab.spreadsheet-tab-protected > .lock, .spreadsheet-tab.spreadsheet-tab-protected:hover > .lock {
 	width: 16px;
 	height: 16px;
-	background-image: url('images/lc_protect.svg') !important;
+	background-image: url('images/lc_spreadsheet_protected.svg') !important;
 	background-repeat: no-repeat !important;
 }
 
@@ -55,26 +64,6 @@
 	border: 1px solid var(--color-border-darker);
 	background: var(--color-background-darker) !important;
 	color: var(--color-text-darker) !important;
-}
-
-.tab-drop-area {
-	height: 32px;
-	width: 4px;
-	opacity: 0;
-	margin-top: 4px;
-	padding-top: 8px;
-	vertical-align: bottom;
-	display: inline-block;
-	background-color: var(--color-main-background);
-	padding-bottom: 5px;
-}
-
-.tab-drop-area-active {
-	background-color: rgb(109, 109, 211);
-}
-
-.tab-drop-area.tab-drop-area-active {
-	opacity: 100% !important;
 }
 
 #drop-zone-end-container {
@@ -185,16 +174,6 @@
 	cursor: row-resize;
 }
 
-.spreadsheet-cell-resize-marker {
-	margin-left: 0px;
-	margin-top: 0px;
-	width: 16px;
-	height: 16px;
-	background-image: url('images/cell-resize-marker.svg');
-	background-size: 100% 100%;
-	background-repeat: no-repeat;
-}
-
 .spreadsheet-cell-autofill-marker {
 	margin-left: 0px;
 	margin-top: 0px;
@@ -235,4 +214,97 @@
 */
 .spreadsheet ~ #main-document-content #sidebar-dock-wrapper .unoEditStyle.sidebar {
 	display: none;
+}
+
+/* formulabar */
+
+#addressInput {
+	display: flex;
+	flex-flow: column;
+}
+#addressInput-input {
+	color: var(--color-main-text);
+	background-color: var(--color-background-lighter);
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius);
+	align-self: stretch;
+	/* Same line-height as formulabar input */
+	line-height: 1.2;
+	flex-basis: 30px;
+}
+
+#formulabar-toolbox {
+	grid-template-rows: 30px;
+}
+
+#AutoSumMenu {
+	/* Make sure it matches buttons height*/
+	grid-template-rows: var(--btn-size);
+}
+
+#formulabar.expanded > .root-container > .formulabar {
+	grid-template-rows: 72px;
+}
+
+#formulabar.expanded #formulabar-toolbox {
+	grid-template-rows: 72px;
+}
+
+#formulabar {
+	padding: 4px;
+	background-color: var(--color-main-background);
+	border-top: 1px solid var(--color-border);
+	display: none;
+}
+
+#formulabar > .root-container > .formulabar {
+	display: grid;
+	grid-template-columns: 110px 112px auto;
+	grid-template-rows: 30px;
+}
+
+#formulabar > .root-container > .formulabar * {
+	box-sizing: border-box;
+}
+
+/* sheet tabs */
+
+.empty-deltas {
+	pointer-events: none; /* fix cypress, it covers some buttons*/
+}
+
+#spreadsheet-toolbar {
+	width: 100%;
+	z-index: 1000;
+	display: grid;
+	grid-template-columns: 170px auto;
+	text-align: center;
+	vertical-align: middle;
+	padding: 0;
+	background-color: var(--color-main-background);
+	border-top: 1px solid var(--color-border);
+}
+
+#sheets-buttons-toolbox > div.toolbox {
+	display: grid;
+	grid-auto-flow: column;
+	align-content: center;
+	height: 38px;
+}
+
+.tab-drop-area {
+	height: 32px;
+	width: 4px;
+	opacity: 0;
+	vertical-align: bottom;
+	display: inline-block;
+	background-color: var(--color-main-background);
+}
+
+.tab-drop-area-active {
+	background-color: rgb(109, 109, 211);
+}
+
+.tab-drop-area.tab-drop-area-active {
+	opacity: 100% !important;
 }

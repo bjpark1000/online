@@ -36,13 +36,13 @@
       .vbox {
           display: flex;
           flex-direction: column;
-          gap: 1em;
+          gap: 0.5em;
       }
 
       .hbox {
           display: flex;
           flex-direction: row;
-          gap: 1em;
+          gap: 0.5em;
       }
 
       .grid {
@@ -56,7 +56,12 @@
           gap: 15px;
           grid-gap: 15px;
       }
-
+      h3 {
+          margin: 0.2em 0px;
+      }
+      pre {
+          margin: 0px;
+      }
 
     </style>
 
@@ -99,6 +104,12 @@
             });
       }
 
+      function insertGraphic(text) {
+        post({'MessageId': 'Action_InsertGraphic',
+              'Values': {'filename': 'date.png', 'url': 'https://sdk.collaboraonline.com/_static/collabora.svg'}
+            });
+      }
+
       function capitalize() {
         post({'MessageId': 'CallPythonScript',
               'SendTime': Date.now(),
@@ -120,6 +131,12 @@
             });
       }
 
+      function closeSession() {
+        post({'MessageId': 'Close_Session',
+              'Values': null
+            });
+      }
+
       function fullscreenDocument() {
         post({'MessageId': 'Action_Fullscreen',
               'Values': null
@@ -135,6 +152,12 @@
       function exportAsHtml() {
         post({'MessageId': 'Action_Export',
               'Values': { 'Format': 'html', }
+            });
+      }
+
+      function exportAsPdfWithNotify() {
+        post({'MessageId': 'Action_Export',
+              'Values': { 'Format': 'pdf', Notify: true }
             });
       }
 
@@ -259,6 +282,10 @@
         if (!msg) {
           return;
         }
+
+        let messageOut = document.getElementById("messages");
+        messageOut.textContent = messageOut.textContent + JSON.stringify(msg) + "\n";
+
         if (msg.MessageId == 'App_LoadingStatus') {
           if (msg.Values) {
             if (msg.Values.Status == 'Document_Loaded') {
@@ -470,13 +497,17 @@
 
           <div class="grid">
             <button onclick="save(); return false;">Save</button>
+            <div></div>
             <button onclick="closeDocument(); return false;">Close</button>
+            <button onclick="closeSession(); return false;">Close Session</button>
 
             <button onclick="fullscreenDocument(); return false;">Fullscreen</button>
             <button onclick="startPresentation(); return false;">Start presentation</button>
 
             <button onclick="exportAsHtml(); return false;">Export as HTML</button>
+            <button onclick="exportAsPdfWithNotify(); return false;">Export as PDF with Notify set</button>
             <button onclick="getExportFormats(); return false;">Get export formats</button>
+            <div></div>
 
             <button onclick="ShowSave(false); return false;">Hide Save Commands</button>
             <button onclick="ShowSave(true); return false;">Show Save Commands</button>
@@ -498,14 +529,15 @@
           <div>
             <button onclick="reset_access_token(document.getElementById('new-access-token').value); return false;">Reset Access-Token</button>
           </div>
-	  <h3>User State</h3>
-	  <div class="hbox">
-	    <button onclick="GetUserState(); return false;">Get User State</button>
-	    <div id="DisplayUserState">
-	      <p>State: <span id="UserState_State">unknown</span>
-		Elapsed: <span id="UserState_Elapsed">0</span> sec.</p>
-	    </div>
-	  </div>
+
+          <h3>User State</h3>
+          <div class="hbox">
+            <button onclick="GetUserState(); return false;">Get User State</button>
+            <div id="DisplayUserState">
+              <p>State: <span id="UserState_State">unknown</span>
+          Elapsed: <span id="UserState_Elapsed">0</span> sec.</p>
+            </div>
+          </div>
         </form>
 
         <div class="vbox framed">
@@ -526,6 +558,13 @@
             <button onclick="executeMessage(); return false;">Execute</button>
           </form>
         </div>
+    </div>
+
+    <div class="framed hbox">
+      <div class="vbox">
+        <h3>Messages from editor</h3>
+
+        <pre id="messages"></pre>
       </div>
     </div>
 
@@ -543,6 +582,7 @@
           </div>
           <div class="vbox">
             <button onclick="ShowInsertButton(); return false;" title="via Insert_Button">Insert custom button</button>
+            <button onclick="insertGraphic(); return false;">Sent InsertGraphic post message</button>
           </div>
           <div class="vbox">
             <button onclick="ShowNotebookbar(false); return false;">Compact Toolbar</button>

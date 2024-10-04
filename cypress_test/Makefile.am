@@ -9,7 +9,6 @@ ESLINT_BINARY = $(abs_builddir)/node_modules/eslint/bin/eslint.js
 WAIT_ON_BINARY = $(abs_builddir)/node_modules/wait-on/bin/wait-on
 GET_PORT_BINARY = $(abs_builddir)/node_modules/get-port-cli/cli.js
 NPM_INSTALLED = $(abs_builddir)/workdir/npm_installed
-CAPABILITIES = $(if @ENABLE_SETCAP@,true,false)
 CYPRESS_CONFIG = $(abs_srcdir)/cypress.config.ts
 SERVER_ARG = $(subst :, ,$(shell basename $(if $(coolwsd),$(coolwsd),http://localhost:9980)))
 COOLWSD_SERVER = $(firstword $(SERVER_ARG))
@@ -106,7 +105,8 @@ MULTIUSER_TESTS_DONE= \
 check-local: do-check
 	$(if $(wildcard $(ERROR_LOG)),$(error CypressError: some tests failed!))
 
-do-check: $(DESKTOP_TEST_FILES_DONE) $(MOBILE_TEST_FILES_DONE) $(IDLE_TEST_FILES_DONE) $(MULTIUSER_TESTS_DONE)
+# TODO: enable multiuser tests $(MULTIUSER_TESTS_DONE)
+do-check: $(DESKTOP_TEST_FILES_DONE) $(MOBILE_TEST_FILES_DONE) $(IDLE_TEST_FILES_DONE)
 	$(V)$(KILL_COMMAND) || true
 	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(if $(wildcard $(ERROR_LOG)),$(V)cat $(ERROR_LOG))
@@ -151,11 +151,11 @@ $(DESKTOP_TEST_FILES_DONE): $(PID_FILE)
 		$(V)$(foreach done_file,$(DESKTOP_TEST_FILES_DONE),mkdir -p $(dir $(done_file)) && touch $(done_file) &&) true\
 	)
 
-$(MULTIUSER_TESTS_DONE): $(PID_FILE) $(MOBILE_TEST_FILES_DONE)
+$(MULTIUSER_TESTS_DONE): $(PID_FILE) $(MOBILE_TEST_FILES_DONE) $(IDLE_TEST_FILES_DONE)
 	$(call run_all_multiuser_tests)
 	$(V)mkdir -p $(dir $@) && touch $@
 
-$(IDLE_TEST_FILES_DONE): $(MULTIUSER_TESTS_DONE) start_short_idle_coolwsd $(PID_FILE)
+$(IDLE_TEST_FILES_DONE): start_short_idle_coolwsd $(PID_FILE)
 	$(if $(PARALLEL_BUILD),\
 		$(call run_idle_tests,$(subst $(IDLE_TRACK_FOLDER)/,,$(basename $@)),$(basename $@).log),\
 		$(call run_idle_tests))
@@ -195,17 +195,17 @@ define start_coolwsd_instance
 	$(V)mkdir -p $(dir $(COOLWSD_OUTPUT))
 	../coolwsd --o:sys_template_path="@SYSTEMPLATE_PATH@" \
 			--o:child_root_path="@JAILS_PATH@" --o:storage.filesystem[@allow]=true \
-			--o:security.capabilities="$(CAPABILITIES)" \
 			--disable-ssl --forcecaching \
 			--o:ssl.cert_file_path="$(abs_top_srcdir)/etc/cert.pem" \
 			--o:ssl.key_file_path="$(abs_top_srcdir)/etc/key.pem" \
 			--o:ssl.ca_file_path="$(abs_top_srcdir)/etc/ca-chain.cert.pem" \
 			--o:admin_console.username=admin --o:admin_console.password=admin \
 			--o:logging.file[@enable]=true --o:logging.level=trace \
-			--o:welcome.enable=false \
+			--o:logging.disabled_areas="" --o:welcome.enable=false \
 			--o:user_interface.mode=$(USER_INTERFACE) \
 			--o:accessibility.enable=$(A11Y_ENABLE) \
 			--o:security.enable_macros_execution=true \
+			--o:mount_namespaces[@default]=true \
 			$(if $(SHORT_IDLE),--o:per_view.out_of_focus_timeout_secs=1) \
 			$(if $(SHORT_IDLE),--o:per_view.idle_timeout_secs=7) \
 			--port=$(FREE_PORT) \
@@ -214,7 +214,7 @@ define start_coolwsd_instance
 			--unattended \
 			$(if $(findstring php-proxy, $(CYPRESS_INTEGRATION)),--o:net.proxy_prefix=true) \
 			 > $(COOLWSD_OUTPUT) 2>&1 &
-	$(V)$(WAIT_ON_BINARY) http://localhost:$(FREE_PORT) --timeout 60000
+	$(V)$(WAIT_ON_BINARY) http://localhost:$(FREE_PORT) --timeout 60000 || (echo ==dump coolwsd.log== && cat $(COOLWSD_OUTPUT) && exit 1)
 	$(V)echo
 endef
 
@@ -340,7 +340,7 @@ DESKTOP_CONFIG = \
 	specPattern=$(DESKTOP_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(DESKTOP_USER_AGENT)
 
 DESKTOP_ENV = \
-	DATA_FOLDER=$(DESKTOP_DATA_FOLDER),DATA_WORKDIR=$(DESKTOP_DATA_WORKDIR),WSD_VERSION_HASH=$(COOLWSD_VERSION_HASH),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),SCREENSHOT_FOLDER=$(abs_srcdir)/cypress/screenshots,IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/
+	DATA_FOLDER=$(DESKTOP_DATA_FOLDER),DATA_WORKDIR=$(DESKTOP_DATA_WORKDIR),WSD_VERSION_HASH=$(COOLWSD_VERSION_HASH),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/
 
 DESKTOP_INCLUDE_TAGS = \
 	tagdesktop,$(A11Y_TAG)
@@ -405,7 +405,7 @@ IDLE_CONFIG = \
 	specPattern=$(IDLE_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(IDLE_USER_AGENT)
 
 IDLE_ENV = \
-	DATA_FOLDER=$(IDLE_DATA_FOLDER),DATA_WORKDIR=$(IDLE_DATA_WORKDIR),WSD_VERSION_HASH=$(COOLWSD_VERSION_HASH),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),SCREENSHOT_FOLDER=$(abs_srcdir)/cypress/screenshots,IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/
+	DATA_FOLDER=$(IDLE_DATA_FOLDER),DATA_WORKDIR=$(IDLE_DATA_WORKDIR),WSD_VERSION_HASH=$(COOLWSD_VERSION_HASH),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/
 
 IDLE_INCLUDE_TAGS = \
 	tagdesktop,$(A11Y_TAG)

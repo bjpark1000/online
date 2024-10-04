@@ -1,27 +1,24 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 
 describe(['tagdesktop', 'tagproxy'], 'macro dialog tests', function() {
-	var testFileName = 'macro.ods';
+
+	beforeEach(function() {
+		var newFilePath = helper.setupDocument('calc/macro.ods');
+		// Skip document check to click through accept macro dialog first
+		helper.loadDocument(newFilePath,true);
+		acceptMacroExecution();
+		helper.documentChecks();
+	});
 
 	function acceptMacroExecution() {
 		cy.get('#MacroWarnMedium.jsdialog')
 			.should('exist');
 
-		helper.clickOnIdle('#MacroWarnMedium.jsdialog #ok');
+		cy.cGet('#MacroWarnMedium.jsdialog #ok').click();
 	}
-
-	beforeEach(function() {
-		helper.beforeAll(testFileName, 'calc', undefined, undefined, undefined, true);
-		acceptMacroExecution();
-		helper.checkIfDocIsLoaded();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
 
 	function expandEntryInTreeView(entryText) {
 		cy.cGet().contains('.jsdialog.ui-treeview-cell', entryText)

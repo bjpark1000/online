@@ -1,15 +1,13 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply font changes.', function() {
-	var origTestFileName = 'apply_font.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		helper.setupAndLoadDocument('calc/apply_font.ods');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
@@ -20,42 +18,46 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply font changes.', funct
 		mobileHelper.openTextPropertiesPanel();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	it('Apply bold.', function() {
-		helper.clickOnIdle('#Bold');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#Bold').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td b').should('exist');
 	});
 
 	it('Apply italic.', function() {
-		helper.clickOnIdle('#Italic');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#Italic').click();
 		calcHelper.selectEntireSheet();
+		helper.copy();
 		cy.cGet('#copy-paste-container table td i').should('exist');
 	});
 
 	it('Apply underline.', function() {
-		helper.clickOnIdle('#Underline');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#Underline').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td u')
 			.should('exist');
 	});
 
 	it('Apply strikeout.', function() {
-		helper.clickOnIdle('#Strikeout');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#Strikeout').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td s')
 			.should('exist');
 	});
 
 	it('Apply shadowed.', function() {
-		helper.clickOnIdle('#Shadowed');
+		cy.cGet('#Shadowed').click();
 
 		calcHelper.selectEntireSheet();
 
@@ -63,33 +65,39 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply font changes.', funct
 	});
 
 	it('Apply font name.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('#TextPropertyPanel').click();
 		cy.cGet('#fontnamecombobox').click();
 		cy.cGet('#fontnamecombobox').contains('.mobile-wizard.ui-combobox-text', 'Linux Libertine G').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td font')
 			.should('have.attr', 'face', 'Linux Libertine G');
 	});
 
 	it('Apply font size.', function() {
+		helper.setDummyClipboardForCopy();
 		cy.cGet('#TextPropertyPanel').click();
 		cy.cGet('#fontsizecombobox').click();
 		cy.cGet('#fontsizecombobox').contains('.mobile-wizard.ui-combobox-text', '14 pt').click();
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td font')
 			.should('have.attr', 'size', '4');
 	});
 
 	it('Apply font color.', function() {
-		helper.clickOnIdle('#Color .ui-header');
+		helper.setDummyClipboardForCopy();
+		cy.cGet('#Color .ui-header').click();
 
 		mobileHelper.selectFromColorPicker('#Color', 5);
 
 		calcHelper.selectEntireSheet();
+		helper.copy();
 
 		cy.cGet('#copy-paste-container table td font')
 			.should('have.attr', 'color', '#00FF00');

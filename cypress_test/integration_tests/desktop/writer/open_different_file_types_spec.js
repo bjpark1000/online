@@ -1,20 +1,9 @@
-/* global describe it cy require afterEach */
-const { assertImageSize, openReadOnlyFile } = require('../../common/desktop_helper');
+/* global describe it cy require */
+const { assertImageSize  } = require('../../common/desktop_helper');
 var helper = require('../../common/helper');
+var desktopHelper = require('../../common/desktop_helper');
 
 describe.skip(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Open different file types', function() {
-
-	var testFileName = '';
-
-	function before(filename) {
-		var origTestFileName = filename;
-
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
-	}
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
 
 	function assertData() {
 		//select all the content of doc
@@ -50,34 +39,34 @@ describe.skip(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Open different file t
 	}
 
 	it('Open doc file', { defaultCommandTimeout: 60000 }, function() {
-		before('testfile.doc');
+		helper.setupAndLoadDocument('writer/testfile.doc');
 		assertData();
 	});
 
 	it('Open docx file', { defaultCommandTimeout: 60000 }, function() {
-		before('testfile.docx');
+		helper.setupAndLoadDocument('writer/testfile.docx');
 		assertData();
 	});
 
 	it('Open docm file', { defaultCommandTimeout: 60000 }, function() {
-		before('testfile.docm');
+		helper.setupAndLoadDocument('writer/testfile.docm');
 		assertData();
 	});
 
 	it('Open fodt file', { defaultCommandTimeout: 60000 }, function() {
-		before('testfile.fodt');
+		helper.setupAndLoadDocument('writer/testfile.fodt');
 		assertData();
 	});
 
 	it('Open dot file', { defaultCommandTimeout: 60000 }, function() {
-		testFileName = openReadOnlyFile('writer', 'testfile.dot');
+		desktopHelper.openReadOnlyFile('writer/testfile.dot');
 	});
 
 	it('Open dotm file', { defaultCommandTimeout: 60000 }, function() {
-		testFileName = openReadOnlyFile('writer', 'testfile.dotm');
+		desktopHelper.openReadOnlyFile('writer/testfile.dotm');
 	});
 
 	it('Open dotx file', { defaultCommandTimeout: 60000 }, function() {
-		testFileName = openReadOnlyFile('writer','testfile.dotx');
+		desktopHelper.openReadOnlyFile('writer/testfile.dotx');
 	});
 });

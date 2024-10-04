@@ -59,22 +59,22 @@ void FileServeTests::testUIDefaults()
     LOK_ASSERT_EQUAL(std::string("classic"), uiMode);
 
     LOK_ASSERT_EQUAL(
-        std::string("{\"spreadsheet\":{\"ShowSidebar\":false},\"text\":{\"ShowRuler\":true}}"),
+        std::string("{\"spreadsheet\":{\"ShowSidebar\":\"false\"},\"text\":{\"ShowRuler\":\"true\"}}"),
         FileServerRequestHandler::uiDefaultsToJSON("TextRuler=true;SpreadsheetSidebar=false",
                                                    uiMode, uiTheme, savedUIState));
     LOK_ASSERT_EQUAL(std::string(""), uiMode);
 
     LOK_ASSERT_EQUAL(
-        std::string("{\"presentation\":{\"ShowStatusbar\":false},\"spreadsheet\":{\"ShowSidebar\":"
-                    "false},\"text\":{\"ShowRuler\":true},\"uiMode\":\"notebookbar\"}"),
+        std::string("{\"presentation\":{\"ShowStatusbar\":\"false\"},\"spreadsheet\":{\"ShowSidebar\":"
+                    "\"false\"},\"text\":{\"ShowRuler\":\"true\"},\"uiMode\":\"notebookbar\"}"),
         FileServerRequestHandler::uiDefaultsToJSON(
             ";;UIMode=notebookbar;;PresentationStatusbar=false;;TextRuler=true;;bah=ugh;;"
             "SpreadsheetSidebar=false",
             uiMode, uiTheme, savedUIState));
 
-    LOK_ASSERT_EQUAL(std::string("{\"drawing\":{\"ShowStatusbar\":true},\"presentation\":{"
-                                 "\"ShowStatusbar\":false},\"spreadsheet\":{\"ShowSidebar\":false},"
-                                 "\"text\":{\"ShowRuler\":true},\"uiMode\":\"notebookbar\"}"),
+    LOK_ASSERT_EQUAL(std::string("{\"drawing\":{\"ShowStatusbar\":\"true\"},\"presentation\":{"
+                                 "\"ShowStatusbar\":\"false\"},\"spreadsheet\":{\"ShowSidebar\":\"false\"},"
+                                 "\"text\":{\"ShowRuler\":\"true\"},\"uiMode\":\"notebookbar\"}"),
                      FileServerRequestHandler::uiDefaultsToJSON(
                          ";;UIMode=notebookbar;;PresentationStatusbar=false;;TextRuler=true;;bah="
                          "ugh;;SpreadsheetSidebar=false;;DrawingStatusbar=true",
@@ -88,21 +88,21 @@ void FileServeTests::testCSSVars()
     constexpr auto testname = __func__;
 
     LOK_ASSERT_EQUAL(
-        std::string("<style>:root {--co-somestyle-text:#123456;--co-somestyle-size:15px;}</style>"),
+        std::string("OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1NjstLWNvLXNvbWVzdHlsZS1zaXplOjE1cHg7fQ=="),
         FileServerRequestHandler::cssVarsToStyle(
             "--co-somestyle-text=#123456;--co-somestyle-size=15px;"));
 
     LOK_ASSERT_EQUAL(
-        std::string("<style>:root {--co-somestyle-text:#123456;--co-somestyle-size:15px;}</style>"),
+        std::string("OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1NjstLWNvLXNvbWVzdHlsZS1zaXplOjE1cHg7fQ=="),
         FileServerRequestHandler::cssVarsToStyle(
             ";;--co-somestyle-text=#123456;;--co-somestyle-size=15px;;;"));
 
     LOK_ASSERT_EQUAL(
-        std::string("<style>:root {--co-somestyle-text:#123456;--co-somestyle-size:15px;}</style>"),
+        std::string("OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1NjstLWNvLXNvbWVzdHlsZS1zaXplOjE1cHg7fQ=="),
         FileServerRequestHandler::cssVarsToStyle(
             "--co-somestyle-text=#123456;;--co-somestyle-size=15px;--co-sometext#324;;"));
 
-    LOK_ASSERT_EQUAL(std::string("<style>:root {--co-somestyle-text:#123456;}</style>"),
+    LOK_ASSERT_EQUAL(std::string("OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1Njt9"),
                      FileServerRequestHandler::cssVarsToStyle(
                          "--co-somestyle-text=#123456;;--some-val=3453--some-other-val=4536;;"));
 }
@@ -437,7 +437,7 @@ void FileServeTests::testPreProcessedFileSubstitution()
         { "BUYPRODUCT_URL", "https://buy.ourproduct.com/'" }
     };
 
-    preProcessedFileSubstitution(testname, variables);
+    preProcessedFileSubstitution(testname, std::move(variables));
     preProcessedFileSubstitution(std::string(testname) + "_empty",
                                  std::unordered_map<std::string, std::string>());
 }

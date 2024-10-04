@@ -24,9 +24,8 @@ class SslStreamSocket final : public StreamSocket
 {
 public:
     SslStreamSocket(const std::string& host, const int fd, Type type, bool isClient,
-                    std::shared_ptr<ProtocolHandlerInterface> responseClient,
                     ReadType readType = NormalRead)
-        : StreamSocket(host, fd, type, isClient, std::move(responseClient), readType)
+        : StreamSocket(host, fd, type, isClient, readType)
         , _bio(nullptr)
         , _ssl(nullptr)
         , _sslWantsTo(SslWantsTo::Neither)
@@ -75,6 +74,20 @@ public:
             SSL_set_accept_state(_ssl);
         }
     }
+
+    long getSslVerifyResult() override
+    {
+        return SSL_get_verify_result(_ssl);
+    }
+
+    static std::string getSslVerifyString(long lerr)
+    {
+        if (lerr != X509_V_OK)
+            return X509_verify_cert_error_string(lerr);
+        return std::string();
+    }
+
+    std::string getSslCert(std::string& subjectHash) override;
 
     ~SslStreamSocket()
     {
@@ -426,6 +439,14 @@ private:
                 LOG_TRC("Throwing SSL Error ("
                         << context << "): " << msg); // Locate the source of the exception.
                 errno = last_errno; // Restore errno.
+
+                handshakeFail();
+
+                std::string sslVerifyResult = getSslVerifyString(SSL_get_verify_result(_ssl));
+                // If there is anything useful available from SSL_get_verify_result provide a warning about that.
+                if (!sslVerifyResult.empty())
+                    LOG_ERR("SSL verification warning (" << context << "): " << sslVerifyResult);
+
                 throw std::runtime_error(msg);
             }
             break;

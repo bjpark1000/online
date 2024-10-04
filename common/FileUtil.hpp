@@ -13,6 +13,7 @@
 
 #include <cerrno>
 #include <chrono>
+#include <fcntl.h>
 #include <string>
 #include <sys/stat.h>
 
@@ -35,12 +36,15 @@ namespace FileUtil
     /// Create a secure, random directory path.
     std::string createRandomDir(const std::string& path);
 
-    // Save data to a file (overwriting an existing file if necessary) with checks for errors. Write
-    // to a temporary file in the same directory that is then atomically renamed to the desired name
-    // if everything goes well. In case of any error, both the destination file (if it already
-    // exists) and the temporary file (if was created, or existed already) are removed. Return true
-    // if everything succeeded.
-    bool saveDataToFileSafely(const std::string& fileName, const char* data, std::size_t size);
+    /// return the local path to the jailPath under localJailRoot
+    /// localJailRoot /chroot/jailId
+    /// jailPath /tmp/user/doc/childId
+    /// with usingMountNamespaces false then simply return:
+    /// -> /chroot/jailId/tmp/user/doc/childId
+    /// otherwise replaces jailPath's in /tmp with the tmp dir that is mounted
+    /// from, e.g. return:
+    /// -> /chroot/tmp/cool-jailId/tmp/user/doc/childId
+    std::string buildLocalPathToJail(bool usingMountNamespaces, std::string localJailRoot, std::string jailPath);
 
     // We work around some of the mess of using the same sources both on the server side and in unit
     // tests with conditional compilation based on BUILDING_TESTS.
@@ -70,6 +74,10 @@ namespace FileUtil
     {
         removeFile(path.toString(), recursive);
     }
+
+    /// Remove empty directories recursively.
+    /// We seem to leave behind empty directories in jails and that causes a lot of noise.
+    void removeEmptyDirTree(const std::string& path);
 
     /// Returns true iff the directory is empty (or doesn't exist).
     bool isEmptyDirectory(const char* path);
@@ -124,7 +132,7 @@ namespace FileUtil
     std::string createRandomTmpDir(std::string root = std::string());
 
     /// Create a temporary directory in the root provided
-    std::string createTmpDir(std::string dirName, std::string root = std::string());
+    std::string createTmpDir(const std::string& dirName, std::string root = std::string());
 
     /// Returns the realpath(3) of the provided path.
     std::string realpath(const char* path);
@@ -139,6 +147,57 @@ namespace FileUtil
     /// Returns true iff the two files both exist, can be read,
     /// have equal size and every byte of their contents match.
     bool compareFileContents(const std::string& rhsPath, const std::string& lhsPath);
+
+    /// Reads the whole file into the given buffer. Only for small files.
+    /// Does *not* clear the buffer before writing to it. Returns the number of bytes read, -1 for error.
+    template <typename T>
+    ssize_t readFile(const std::string& path, T& data, int maxSize = 256 * 1024)
+    {
+        const int fd = ::open(path.c_str(), O_RDONLY);
+        if (fd < 0)
+            return -1;
+
+        struct stat st;
+        if (::fstat(fd, &st) != 0 || st.st_size > maxSize)
+        {
+            ::close(fd);
+            return -1;
+        }
+
+        const std::size_t originalSize = data.size();
+        auto remainingSize = st.st_size;
+        data.resize(originalSize + remainingSize);
+        off_t off = originalSize;
+        for (;;)
+        {
+            if (remainingSize == 0)
+            {
+                // Nothing to read.
+                break;
+            }
+
+            int n;
+            while ((n = ::read(fd, &data[off], remainingSize)) < 0 && errno == EINTR)
+            {
+            }
+
+            if (n <= 0)
+            {
+                if (n == 0) // EOF.
+                    break;
+
+                ::close(fd);
+                data.resize(originalSize);
+                return -1; // Error.
+            }
+
+            off += n;
+            remainingSize -= n;
+        }
+
+        close(fd);
+        return st.st_size;
+    }
 
     /// Reads the whole file to memory. Only for small files.
     std::unique_ptr<std::vector<char>> readFile(const std::string& path, int maxSize = 256 * 1024);
@@ -253,6 +312,10 @@ namespace FileUtil
         const int _res;
         const int _errno;
     };
+
+    std::vector<std::string> getDirEntries(const std::string dirPath);
+
+    void lslr(const std::string& dir);
 
 } // end namespace FileUtil
 

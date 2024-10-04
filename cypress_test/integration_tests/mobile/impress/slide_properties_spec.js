@@ -1,21 +1,15 @@
-/* global describe it cy require afterEach expect beforeEach */
+/* global describe it cy require expect beforeEach */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.', function() {
-	var origTestFileName = 'slide_properties.odp';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'impress');
+		helper.setupAndLoadDocument('impress/slide_properties.odp');
 		mobileHelper.enableEditingMobile();
 		previewShouldBeFullWhite();
 		mobileHelper.openMobileWizard();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function previewShouldBeFullWhite(fullWhite = true, slideNumber = 1) {
@@ -27,7 +21,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 	}
 
 	function switchToMasterView() {
-		helper.clickOnIdle('#masterslidebutton');
+		cy.cGet('#masterslidebutton').click();
 		cy.cGet('#closemasterslide').should('exist');
 		previewShouldBeFullWhite(false);
 	}
@@ -42,7 +36,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 			.should('have.attr', 'style', 'background-color: rgb(114, 159, 207);');
 
 		// Change the color
-		helper.clickOnIdle('#fillattr');
+		cy.cGet('#fillattr').click();
 
 		mobileHelper.selectFromColorPalette(0, 5);
 
@@ -69,11 +63,11 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 		cy.cGet('#fillattr3 .color-sample-selected').should('have.attr', 'style', 'background-color: rgb(255, 215, 215);');
 
 		// Change the colors
-		helper.clickOnIdle('#fillattr2');
+		cy.cGet('#fillattr2').click();
 
 		mobileHelper.selectFromColorPalette(0, 2);
 
-		helper.clickOnIdle('#fillattr3');
+		cy.cGet('#fillattr3').click();
 
 		mobileHelper.selectFromColorPalette(1, 4);
 
@@ -216,7 +210,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 		// Master objects are disabled, enable the settings first
 		cy.cGet('input#displaymasterobjects').should('not.have.prop', 'checked', true);
 
-		helper.clickOnIdle('input#displaymasterobjects');
+		cy.cGet('input#displaymasterobjects').click();
 
 		cy.cGet('input#displaymasterobjects').should('have.prop', 'checked', true);
 
@@ -234,7 +228,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 		//cy.get('input#displaymasterobjects')
 		//	.should('have.prop', 'checked', true);
 
-		helper.clickOnIdle('input#displaymasterobjects');
+		cy.cGet('input#displaymasterobjects').click();
 
 		cy.cGet('input#displaymasterobjects').should('not.have.prop', 'checked', true);
 
@@ -299,10 +293,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 	});
 
 	it('Apply master slide layout.', function() {
-		// Wait for mobile wizard menu
-		cy.wait(500);
-
-		// We have white background by deafult checked by before() method
+		// We have white background by deafult checked by beforeEach() method
 		// Select a new master slide with a background color
 		cy.cGet('#masterslide .ui-header-left').should('have.text', 'Default');
 
@@ -320,7 +311,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 
 	it.skip('Apply layout.', function() {
 		// Apply title / subtitle layout
-		helper.clickOnIdle('#Layouts');
+		cy.cGet('#Layouts').click();
 
 		// Blank is the default
 		// TODO: wring item is selected by default
@@ -328,7 +319,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 		//	.should('have.class', 'cool-context-down');
 
 		// Select layout with title and content shape
-		helper.clickOnIdle('.layout:nth-of-type(3)');
+		cy.cGet('.layout:nth-of-type(3)').click();
 
 		previewShouldBeFullWhite(false);
 
@@ -336,7 +327,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 		mobileHelper.closeMobileWizard();
 		mobileHelper.openMobileWizard();
 
-		helper.clickOnIdle('#Layouts');
+		cy.cGet('#Layouts').click();
 
 		cy.cGet('.layout:nth-of-type(3)').should('have.class', 'cool-context-down');
 	});
@@ -417,7 +408,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Changing slide properties.'
 		cy.cGet('#displaymasterobjects label').should('have.class', 'disabled');
 
 		// Switch back to normal mode
-		helper.clickOnIdle('#closemasterslide');
+		cy.cGet('#closemasterslide').click();
 
 		cy.cGet('#masterslidebutton').should('exist');
 

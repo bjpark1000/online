@@ -3,7 +3,7 @@
 
 .notebookbar-tabs-container {
 	display: inline-flex;
-	flex: 1 1 auto;
+	flex: 0.1 0.1 auto;
 	margin-inline-start: 5px;
 }
 
@@ -89,9 +89,20 @@ button.ui-tab.notebookbar {
 	margin: 0 !important;
 }
 
-.unotoolbutton.notebookbar .unobutton img {
-	width: var(--btn-size);
-	height: var(--btn-size);
+.unoSave.savemodified .unobutton img,
+.savemodified.unotoolbutton .unobutton img {
+	box-sizing: border-box;
+	padding-left: 24px;
+}
+
+html:not([data-theme='dark']) .unoSave.savemodified .unobutton img,
+html:not([data-theme='dark']) .savemodified.unotoolbutton .unobutton img {
+	background: url('images/lc_savemodified.svg') no-repeat center;
+}
+
+html[data-theme='dark'] .unoSave.savemodified .unobutton img,
+html[data-theme='dark'] .savemodified.unotoolbutton .unobutton img {
+	background: url('images/dark/lc_savemodified.svg') no-repeat center;
 }
 
 .notebookbar-shortcuts-bar .notebookbar.unotoolbutton {
@@ -100,39 +111,6 @@ button.ui-tab.notebookbar {
 
 .notebookbar-shortcuts-bar .cell.notebookbar {
 	padding: 0 2px;
-}
-
-#save.savemodified:after {
-	content: '';
-	display: block;
-	width: 4px;
-	height: 4px;
-	border-radius: 20px;
-	filter: none !important;
-	background: var(--color-primary-lighter);
-	box-shadow: 0 0 0 2px var(--color-main-background);
-	border: 1px solid var(--color-primary);
-	position: absolute;
-	top: 6px;
-	margin-left: 11px;
-}
-
-#File .unoSave.savemodified {
-	position: relative;
-}
-#File .unoSave.savemodified:after {
-	content: '';
-	display: block;
-	width: 6px;
-	height: 6px;
-	border-radius: 30px;
-	filter: none !important;
-	background: var(--color-primary-lighter);
-	box-shadow: 0 0 0 2px var(--color-main-background);
-	border: 1px solid var(--color-primary);
-	position: absolute;
-	top: 0;
-	margin-left: 28px;
 }
 
 .hasnotebookbar .notebookbar-shortcuts-bar #Menubar,
@@ -173,31 +151,19 @@ button.ui-tab.notebookbar {
 
 /* root container */
 
-.notebookbar-scroll-wrapper {
-	overflow-x: scroll;
-	overflow-y: hidden;
-	scrollbar-width: none; /* Firefox >= 64 */
-	overflow: -moz-scrollbars-none; /* Firefox < 64 */
-	-ms-overflow-style: none;  /* Internet Explorer 10+ */
-	display: flex;
-	height: 72px;
-	align-items: center;
-}
-
 .root-container.notebookbar {
 	display: table-cell;
 	vertical-align: middle;
-}
-
-.notebookbar-scroll-wrapper::-webkit-scrollbar { /* WebKit */
-	width: 0;
-	height: 0;
 }
 
 #toolbar-wrapper.hasnotebookbar {
 	background: var(--color-background-lighter);
 	position: relative;
 	z-index: 11;
+}
+
+#toolbar-row {
+	height: 74px;
 }
 
 .vertical.notebookbar {
@@ -264,6 +230,7 @@ button.ui-tab.notebookbar {
 	color: var(--color-main-text);
 	padding: 0px 5px !important;
 	line-height: normal;
+	grid-column: 2;
 }
 
 #table-HomeTab .unospan-uptoolbar:not(.disabled) {
@@ -288,11 +255,8 @@ button.ui-tab.notebookbar {
 	padding: 4px;
 }
 
-.unotoolbutton.notebookbar .unobutton.selected + .ui-content.unolabel {
-	color: var(--color-text-dark);
-}
-
 .unotoolbutton.notebookbar.disabled:not(.unospan-shortcutstoolbox),
+.unotoolbutton[disabled]:not(.unospan-shortcutstoolbox),
 .mobile-wizard-widebutton.disabled,
 .locking-disabled {
 	opacity: 0.65;
@@ -307,9 +271,19 @@ button.ui-tab.notebookbar {
 	display: none !important;
 }
 
-.unotoolbutton.notebookbar.disabled img, .mobile-wizard-widebutton.disabled img {
+.unotoolbutton.notebookbar.disabled img,
+.mobile-wizard-widebutton.disabled img,
+.unotoolbutton[disabled] img {
 	-webkit-filter: grayscale(100%) brightness(100%);
 	filter: grayscale(100%) brightness(100%);
+}
+
+.unotoolbutton:not(.disabled) * {
+	cursor: pointer;
+}
+
+.unotoolbutton[disabled] * {
+	cursor: not-allowed !important;
 }
 
 .unotoolbutton.notebookbar {
@@ -317,12 +291,7 @@ button.ui-tab.notebookbar {
 	text-align: center;
 }
 
-.unotoolbutton.notebookbar.has-dropdown {
-	display: flex;
-	align-items: center;
-}
-
-.unotoolbutton.notebookbar.has-label > *{ /*so they stay side by side*/
+.unotoolbutton.notebookbar.has-label > *:not(.arrowbackground) { /*so they stay side by side*/
 	display: table-cell;
 	width: 100%;
 	height: 100%;
@@ -340,7 +309,6 @@ button.ui-tab.notebookbar {
 .has-label.has-dropdown:not(.inline) .unolabel{
 	display: inline-block;
 	clear: both;
-	float: inline-start;
 }
 
 /* adding focus to tab in notebookbar */
@@ -363,67 +331,43 @@ button.ui-tab.notebookbar {
 	display: none;
 }
 
-/* comboboxes in readonly mode on mobile devices */
-.notebookbar-scroll-wrapper .select2-container {
-	z-index: auto !important;
-}
-
 /* Writer */
 
 /* File Tab */
 
 /* Home tab */
-#table-HomeTab {
-	margin-left: -16px;/*force alignment: clipboard elements*/
-	margin-top: -5px;
-}
-
-#clearFormatting.notebookbar div img, #FormatPaintbrush.notebookbar div img {
-	width: 24px !important;
-	height: 24px !important;
-}
-
-#clearFormatting.notebookbar, #FormatPaintbrush.notebookbar{
-	height: 24px !important;
-}
-
-#fontsize.notebookbar {
-	width: 65px !important;
-}
-
-#fontnamecombobox.notebookbar {
-	width: 195px !important;
-	top: -1px;
-	padding-right: 0px;
-}
-
-#CharBackColor.notebookbar { /* remove when #2149 is fixed in impress/draw*/
-	margin-left: 44px !important;
-}
-
-#BackgroundColor.notebookbar {
-	margin-left: 0px !important;
-}
-
 #fontsizecombobox.notebookbar {
-	width: 50px !important;
+	width: 4.6rem;
 }
-
 .notebookbar.ui-combobox * {
 	line-height: 22px;
 }
 
+.has-colorpicker.menubutton img {
+	width: var(--btn-size-m) !important;
+	height: var(--btn-size-m) !important;
+	padding-bottom: calc(var(--btn-size) - var(--btn-size-m));
+}
 /* Styles preview */
 
 #stylesview {
 	height: 64px;
 	width: 530px;
 	overflow: auto;
+	display: inline-flex;
+	display: -ms-inline-flexbox;
+	flex-wrap: wrap;
 	padding: 0px;
-	border: 1px solid var(--color-border);
+	border: 1px solid var(--color-stylesview-border);
 	border-radius: var(--border-radius);
 	border-collapse: separate; /*To use box-shadow in Internet Explorer 9 or later*/
 	scrollbar-width: none;
+	background-color: var(--color-stylesview-background);
+	filter: brightness(var(--brightness-stylesview));
+}
+
+#stylesview:hover {
+	filter: none;
 }
 
 #stylesview::-webkit-scrollbar {
@@ -432,9 +376,16 @@ button.ui-tab.notebookbar {
 }
 
 #stylesview .ui-iconview-entry {
-	width: 30%;
 	box-sizing: border-box;
 	padding-top: 0px;
+}
+
+#stylesview .icon-view-item-container {
+	margin: unset;
+}
+
+#stylesview .ui-iconview-entry-title {
+	display: none;
 }
 
 #stylesview .ui-iconview-entry.selected {
@@ -603,6 +554,10 @@ button.ui-tab.notebookbar {
 	background: url('images/lc_downloadas-odg.svg') center;
 }
 
+[class*='as-png-submenu-icon'] {
+	background: url('images/lc_insertgraphic.svg') center;
+}
+
 [class*='as-rtf-submenu-icon'] {
 	background: url('images/lc_downloadas-rtf.svg') center;
 }
@@ -646,4 +601,8 @@ button.ui-tab.notebookbar {
 
 [class*='as-pptx-submenu-icon'] {
 	background: url('images/lc_downloadas-pptx.svg') center;
+}
+
+[class*='as-html-submenu-icon'] {
+	background: url('images/lc_downloadas-html.svg') center;
 }

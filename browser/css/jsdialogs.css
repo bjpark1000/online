@@ -42,17 +42,27 @@
 	min-width: 400px;
 }
 
+.jsdialog-container:not(.snackbar) td[role='gridcell'] {
+	padding-left: 5px;
+	padding-right: 5px;
+}
+
+#AcceptRejectChangesDialog {
+	width: max-content;
+	max-width: 1000px;
+}
 .jsdialog.one-child-popup {
 	border: 0;
 	margin: 0 !important;
 }
 
-.jsdialog-window.modalpopup:not(.snackbar) {
+.jsdialog-window.modalpopup:not(.snackbar),
+.hyperlink-pop-up-container {
 	min-width: 198px;
 	max-width: 498px;
 	border: 1px solid var(--color-border-darker) !important;
 	border-radius: var(--border-radius);
-	box-shadow: 0 0 3px var(--color-border-darker);
+	box-shadow: 0 0 3px var(--color-box-shadow);
 	overflow: auto;
 	position: relative;
 	margin: auto;
@@ -142,7 +152,7 @@
 	vertical-align: middle;
 }
 
-.jsdialog.vertical:not(.sidebar) {
+.jsdialog.vertical:not(.sidebar):not(.ui-separator) {
 	width: 100%;
 }
 
@@ -170,6 +180,13 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 	width: 100%;
 	display: grid;
 	grid-gap: 4px;
+}
+
+/* Special Characters dialog */
+#SpecialCharactersDialog #viewgrid,
+#SpecialCharactersDialog #favgrid {
+	grid-gap: 4px;
+	width: fit-content;
 }
 
 /* Find and replace dialog */
@@ -223,24 +240,59 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 	background-color: transparent;
 }
 .jsdialog.ui-separator.vertical {
-	height: 100%;
-	padding-right: 6px;
-	/* border-right: 1px dashed #888; */
-	background-image: linear-gradient(#888 22%, rgba(255,255,255,0) 0%);
-	background-position: right center;
-	background-size: 1px 14px;
-	background-repeat: repeat-y;
-	box-shadow: inset 0 34px 0 0 white;
+	margin: 5px 0px;
+	padding-right: 1px;
+	background-color: var(--color-background-darker);
+}
+
+.ui-toolbar .ui-separator.vertical {
+	height: 14px;
+	align-self: center;
 }
 
 .jsdialog.ui-separator.horizontal {
-	width: 100%;
 	margin: 0px;
 	background-color: var(--color-border-lighter);
 	border: none;
 	height: 1px;
 }
 
+/* Badge */
+.ui-badge {
+	padding: 5px !important;
+	background-color: var(--color-background-darker);
+	color: var(--color-text-darker);
+	border-width: 0px;
+	border-radius: var(--border-radius);
+	font-family: var(--cool-font);
+	font-size: var(--default-font-size);
+	font-weight: normal;
+}
+
+#toolbar-down .ui-separator.vertical {
+	background-color: var(--color-status-badge);
+	opacity: 0.2;
+}
+
+#toolbar-down .ui-badge,
+#toolbar-down .unolabel {
+	font-family: var(--cool-font);
+	font-size: var(--default-font-size);
+	color: var(--color-status-badge) !important;
+}
+
+#toolbar-down .ui-badge:hover,
+#toolbar-down .menubutton:hover .unolabel {
+	color: var(--color-main-text) !important;
+}
+
+#toolbar-down .unoarrow {
+	border-top-color: var(--color-status-badge);
+}
+
+#toolbar-down .menubutton:hover .unoarrow {
+	border-top-color: var(--color-main-text);
+}
 /* Tabs */
 
 .ui-tabs-content.jsdialog {
@@ -365,8 +417,8 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 }
 
 .ui-listview-icon {
-	height: var(--btn-size);
-	width: var(--btn-size);
+	height: var(--btn-size-s);
+	width: var(--btn-size-s);
 	margin-inline-end: 8px;
 	vertical-align: middle;
 }
@@ -391,6 +443,18 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 .ui-expander-content > .root-container.jsdialog {
 	margin: 4px;
 }
+
+/* Link Button*/
+
+.ui-linkbutton {
+	color: var(--color-text-dark) !important;
+}
+
+.ui-linkbutton:hover {
+	cursor: pointer;
+	color: var(--color-text-lighter) !important;
+}
+
 /* TreeView */
 
 .ui-treeview {
@@ -405,7 +469,8 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 	padding-inline-end: 3px;
 }
 
-.ui-treeview.disabled {
+.ui-treeview.disabled,
+.ui-treeview-entry.disabled {
 	background-color: var(--color-background-dark) !important;
 	color: var(--color-text-lighter) !important;
 }
@@ -580,6 +645,10 @@ input[type='checkbox']:checked.autofilter, .jsdialog input[type='checkbox']:chec
 }
 /* input text */
 
+.ui-dialog .jsdialog.ui-edit:focus-visible {
+	outline-offset: -2px;
+}
+
 .jsdialog.ui-edit, #hyperlink-text-box:not(.mobile-wizard) {
 	color: var(--color-text-dark);
 	background-color: var(--color-background-dark);
@@ -635,6 +704,7 @@ input[type='checkbox']:checked.autofilter, .jsdialog input[type='checkbox']:chec
 	border: none;
 	height: 18px;
 	width: 20px;
+	display: block;
 }
 
 .jsdialog .radiobutton > label {
@@ -650,6 +720,10 @@ input[type='checkbox']:checked.autofilter, .jsdialog input[type='checkbox']:chec
 .ui-dialog-content .jsdialog.ui-text {
 	padding-inline-start: 0;
 	margin: auto 5px;
+}
+
+.jsdialog.ui-grid-cell input[type='checkbox'] + label[for^='hidden-part-checkbox'] {
+	vertical-align: super;
 }
 
 .jsdialog.ui-text {
@@ -719,6 +793,9 @@ input[type='number']:hover::-webkit-outer-spin-button {
 .ui-combobox {
 	display: flex;
 	margin: auto 0;
+	align-items: center;
+	box-sizing: border-box;
+	height: 24px;
 }
 
 .ui-listbox {
@@ -733,15 +810,21 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	-webkit-appearance: none;
 	-moz-appearance: none;
 	appearance: none;
-	min-width: 100px;
-	width: 100%;
-	height: 28px;
+	height: 24px;
 	line-height: normal;
 	font-size: var(--default-font-size);
 	font-family: var(--jquery-ui-font);
 	border-radius: var(--border-radius);
 	background-color: var(--color-background-dark);
 	color: var(--color-text-dark);
+}
+
+.jsdialog-window .ui-listbox,
+.jsdialog-window .ui-combobox,
+.jsdialog-window .ui-timefield {
+	height: 32px;/* Use the same height as in .jsdialog.ui-edit */
+	min-width: 100px;
+	width: 100%;
 }
 
 .ui-listbox option {
@@ -759,14 +842,13 @@ input[type='number']:hover::-webkit-outer-spin-button {
 .ui-listbox-arrow {
 	content: '';
 	background: url('images/jquery-ui-lightness/ui-icons_222222_256x240.png') no-repeat transparent;
-	background-position: -67px -18px !important;
+	background-position: -67px -17px !important;
 	display: inline-block;
 	position: relative;
 	width: 11px;
 	height: 11px;
 	cursor: pointer;
 	pointer-events: none;
-	margin-block-start: 8px;
 	margin-inline-start: -16px;
 	margin-inline-end: 4px;
 }
@@ -788,12 +870,15 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 
 .ui-combobox-content {
+	box-sizing: border-box;
 	width: 100%;
+	height: 100%;
 	border: none;
 	border-start-start-radius: var(--border-radius);
 	border-end-start-radius: var(--border-radius);
 	color: var(--color-text-dark);
 	background-color: var(--color-background-lighter);
+	padding-inline: 5px;
 }
 
 .ui-combobox-button {
@@ -827,13 +912,15 @@ input[type='number']:hover::-webkit-outer-spin-button {
 
 .ui-combobox-entry {
 	width: calc(100% + 15px); /* + padding for scrollbar */
+	display: flex;
+	align-items: center;
 }
 
-.ui-combobox-entry span:hover {
+.ui-combobox-entry:hover {
 	background-color: var(--color-background-dark);
 }
 
-.ui-combobox-entry.selected span:not(:hover) {
+.ui-combobox-entry.selected:not(:hover) span {
 	border: 1px solid var(--color-primary);
 	background-color: var(--color-primary);
 	color: var(--color-primary-text);
@@ -849,6 +936,27 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	color: var(--color-text-dark);
 }
 
+.ui-combobox-entry.checked::before {
+	content: '\2713';
+	display: inline-block;
+	color: var(--color-primary);
+	padding: 0 6px;
+}
+
+.ui-combobox-entry.notchecked::before {
+	content: '\2713';
+	display: inline-block;
+	visibility: hidden;
+	padding: 0 6px;
+}
+
+.ui-combobox-icon {
+	background-repeat: no-repeat !important;
+	width: var(--btn-size);
+	height: var(--btn-size);
+}
+
+/* these rules are for custom rendering like font previews */
 .ui-combobox-entry img {
 	border: 1px solid transparent;
 	max-height: 24px; /* required for hidpi*/
@@ -906,6 +1014,9 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	background-color: var(--color-background-dark);
 	border: 1px solid var(--color-border-dark);
 	border-radius: var(--border-radius);
+	vertical-align: top;
+	width: -webkit-fill-available;
+	width: -moz-available;
 }
 
 /* buttons: btns.css */
@@ -914,10 +1025,10 @@ input[type='number']:hover::-webkit-outer-spin-button {
 
 .ui-iconview {
 	overflow: auto;
-	display: inline-flex;
-	display: -ms-inline-flexbox;
-	flex-wrap: wrap;
 	justify-content: space-between;
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	max-height: 40vh;
 }
 
 .ui-iconview.mobile-wizard {
@@ -939,6 +1050,8 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	border: 1px solid transparent;
 	border-radius: var(--border-radius);
 	padding-top: 5px;
+	text-wrap: nowrap;
+	font-family: var(--jquery-ui-font);
 }
 
 .ui-iconview-entry.selected {
@@ -954,6 +1067,17 @@ input[type='number']:hover::-webkit-outer-spin-button {
 
 .ui-iconview-separator {
 	flex: 0 0 99%;
+}
+
+.icon-view-item-container {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	margin: 5px;
+	text-align: center;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
 }
 
 /* Autofilter dropdown */
@@ -1068,6 +1192,19 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	border-color: transparent;
 }
 
+/* hide radio in filter by color */
+.jsdialog.autofilter #background tr th:nth-of-type(1),
+.jsdialog.autofilter #textcolor tr th:nth-of-type(1),
+.jsdialog.autofilter #background tr td:nth-of-type(1),
+.jsdialog.autofilter #textcolor tr td:nth-of-type(1) {
+	display: none;
+}
+
+/* hide arrow icons in the autofilter menu*/
+#menu img.jsdialog.autofilter.ui-treeview-checkbox {
+	display: none;
+}
+
 /* Word count dialog */
 
 #label9, #documentlabel-mobile {
@@ -1179,7 +1316,9 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	height: 5px;
 	width: 24px;
 	position: relative;
-	top: -6px;
+	top: -5px;
+	grid-column: 1;
+	grid-row: 2;
 	border: 1px solid var(--color-border-dark);
 	border-radius: 7px;
 	outline: 1px solid var(--color-background-lighter);
@@ -1195,6 +1334,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	border-top: 5px solid var(--color-main-text);
 	display: inline-block !important;
 	margin-left: 3px;
+	margin-top: 4px;
 }
 
 .unoarrow:not([disabled]):hover, .menubutton .arrow:not([disabled]):hover {
@@ -1202,11 +1342,14 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 
 .arrowbackground {
-	width: 15px;
-	height: 23px;
-	display: inline-block;
+	box-sizing: border-box;
+	width: 16px;
+	height: 24px;
+	display: flex;
+	align-items: center;
 	border-left: 1px solid transparent;
 	background-color: transparent;
+	grid-column: 3;
 }
 
 .arrowbackground:hover {
@@ -1254,15 +1397,14 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	border-top-color: var(--color-text-lighter);
 }
 
-/* sum button in formulabar */
-.formulabar.menubutton {
-	padding: 0px !important;
-	margin: 0 4px 0 0 !important;
-}
-
 /* toolbox */
 .jsdialog.toolbox {
 	display: flex;
+}
+
+.jsdialog.ui-spacer {
+	display: flex;
+	flex-grow: 1;
 }
 
 /* spinner */
@@ -1278,6 +1420,51 @@ input[type='number']:hover::-webkit-outer-spin-button {
 @keyframes spin {
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
+}
+
+/* color picker */
+.ui-color-picker {
+	padding: 4px;
+}
+
+.ui-color-picker,
+#ui-color-picker-custom,
+#ui-color-picker-recent {
+	display: grid;
+	grid-gap: 4px;
+	align-items: center;
+}
+
+.ui-color-picker-palette {
+	display: grid;
+	grid-gap: 4px;
+	margin-top: 3px;
+}
+
+.ui-color-picker-entry {
+	border: 1px solid transparent;
+	cursor: pointer;
+	width: 16px;
+	height: 16px;
+}
+
+.ui-color-picker-entry:hover {
+	border: 1px solid var(--color-primary);
+}
+
+#ui-color-picker-custom,
+#ui-color-picker-recent {
+	grid-auto-flow: column;
+}
+
+.ui-color-picker .ui-listbox-container,
+.ui-color-picker button {
+	margin: 0px !important;
+	width: 100% !important;
+}
+
+#ui-color-picker-custom input {
+	max-width: 75px;
 }
 
 /* busy popup */
@@ -1578,13 +1765,23 @@ input[type='number']:hover::-webkit-outer-spin-button {
 
 /* toolbuttons */
 
-.jsdialog .ui-content.unobutton {
+.jsdialog:not(.menubutton) > .ui-content.unobutton {
 	width: var(--btn-size);
+}
+
+.jsdialog .ui-content.unobutton {
 	height: var(--btn-size);
-	margin-inline-end: 5px;
+	padding: 0px;
 	vertical-align: middle;
 	background-color: transparent;
 	border: none;
+}
+
+.unotoolbutton.has-dropdown {
+	display: grid;
+	align-items: center;
+	grid-auto-flow: column;
+	grid-template-rows: auto 0px;
 }
 
 .unotoolbutton.jsdialog.sidebar.ui-content > .arrowbackground {
@@ -1640,14 +1837,29 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	filter: invert(.9)
 }
 
+/* scrollable content */
+.ui-scrollable-content {
+	overflow-x: scroll;
+	overflow-y: hidden;
+	scrollbar-width: none; /* Firefox >= 64 */
+	overflow: -moz-scrollbars-none; /* Firefox < 64 */
+	-ms-overflow-style: none;  /* Internet Explorer 10+ */
+	display: flex;
+	align-items: center;
+}
+
+.ui-scrollable-content::-webkit-scrollbar { /* WebKit */
+	width: 0;
+	height: 0;
+}
 
 /* formulabar */
 #sc_input_window.formulabar {
-	height: 28px;
 	border: 1px solid var(--color-border);
 	flex-grow: 1;
 	background-color: var(--color-background-lighter);
 	border-radius: var(--border-radius) 0 0 var(--border-radius);
+	align-self: stretch;
 }
 
 .ui-custom-textarea {
@@ -1675,7 +1887,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	grid-column: 1;
 	grid-row: 1;
 	white-space: pre-wrap;
-	text-wrap: wrap;
+	white-space: wrap;
 }
 
 .ui-custom-textarea-cursor-layer {
@@ -1698,17 +1910,30 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 
 #sc_input_window.formulabar.expanded {
-	height: 72px !important;
 	border-radius: var(--border-radius) 0 var(--border-radius) var(--border-radius) !important;
 }
 
-.formulabar.unotoolbutton {
-	margin-inline-end: 4px !important;
-	opacity: 0.8;
+#formulabar-buttons-toolbox.formulabar.toolbox {
+	display: grid;
+	grid-auto-flow: column;
+	align-items: center;
+	grid-column-gap: 4px;
+	grid-template-columns: repeat(3, 30px);
 }
 
-#acceptformula {
-	margin-inline-start: 3px;
+#formulabar-buttons-toolbox * {
+	align-items: center;
+	justify-content: center;
+}
+
+.unotoolbutton.formulabar {
+	display: flex;
+}
+
+.formulabar.unotoolbutton {
+	margin: 0 !important;
+	padding: 0 !important;
+	opacity: 0.8;
 }
 
 .formulabar.unotoolbutton:hover {
@@ -1722,7 +1947,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 
 #expand.formulabar {
-	height: 28px !important;
+	height: 30px !important;
 	margin: 0 !important;
 	border-radius: 0 var(--border-radius) var(--border-radius) 0 !important;
 	border-inline-start: none !important;
@@ -1750,7 +1975,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 
 #zoterolist.jsdialog {
-	width: 800px;
+	width: calc(min(800px, 80vw));
 }
 
 .jsdialog[id^='zotero'][id$='-label'] {
@@ -1770,8 +1995,47 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	background-color: var(--color-background-lighter);
 	border: 1px solid var(--color-border-darker);
 }
-
+#toolbar-down .jsdialog.menubutton:not([disabled]):hover,
+#toolbar-down .ui-listbox:not([disabled]):hover,
+#toolbar-down .jsdialog.ui-edit:not([disabled]):hover,
+#toolbar-down .jsdialog.ui-textarea:not([disabled]):hover {
+	color: var(--color-text-darker);
+	background-color: transparent !important;
+	border-color: transparent;
+}
+#toolbar-down .unobutton .unolabel {
+	cursor: pointer;
+}
+#toolbar-down .unotoolbutton:hover {
+	background-color: transparent !important;
+	border-color: transparent;
+}
 /* Formula Wizard */
+#FormulaDialog .ui-tabs-root {
+	background-color: var(--color-background-tabs-group);
+	border-radius: var(--border-radius-large);
+}
+#FormulaDialog .jsdialog.ui-tabpage {
+	display: flex;
+}
+#FormulaDialog .jsdialog.ui-tabpage > .ui-grid {
+	grid-template-rows: 0 auto !important;
+	grid-gap: 0px;
+}
+#FormulaDialog #StructPage {
+	display: grid;
+	grid-template-rows: auto 1fr;
+	grid-row-gap: 4px;
+}
+#FormulaDialog #StructPage .ui-treeview-entry {
+	background-color: transparent;
+}
+#FormulaDialog #search {
+	display: flex;
+}
+#FormulaDialog #search-input {
+	flex-grow: 1;
+}
 #FormulaDialog #ParameterPage > .ui-grid-cell {
 	display: flex;
 	flex-direction: column;
@@ -1787,6 +2051,12 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 #FormulaDialog #box3 {
 	display: grid;
+	min-width: 400px;
+}
+#FormulaDialog .ui-tabs-content.jsdialog {
+	grid-auto-columns: 250px;
+	margin-right: 0.2em;
+	margin-top: 0px;
 }
 
 div [id^='TemplateDialog'] {
@@ -1905,6 +2175,12 @@ kbd,
 	min-width: 75%;
 }
 
+/* Keyboard shortcuts */
+#modal-dialog-keyboard-shortcuts-content-box {
+	width: 468px;
+	max-width: 95%; /* Safe guard for when window is too small */
+}
+
 /* Calc -> Insert -> Pivot Table */
 #PivotTableLayout #box2 {
 	grid-gap: 12px; /* make space for vertical separator */
@@ -1915,7 +2191,45 @@ kbd,
 	display: flex;
 }
 
-#DocumentPropertiesDialog #customprops input.ui-timefield {
-	margin-top: auto;
-	margin-bottom: auto;
+/* DocumentPropertiesDialog Custom props */
+#DocumentPropertiesDialog #headerbox,
+#DocumentPropertiesDialog #properties > .jsdialog.ui-grid {
+	grid-template-columns: 128px 128px auto 26px !important;
+	align-items: center;
+	margin-block-start: 4px;
+}
+
+#DocumentPropertiesDialog #properties > .jsdialog.ui-grid > .ui-grid-cell > .ui-grid-cell {
+	align-items: center;
+	grid-column-gap: 4px;
+}
+
+#DocumentPropertiesDialog #customprops button {
+	line-height: 16px;
+	width: 100%;
+	margin: 0;
+}
+
+#DocumentPropertiesDialog #customprops .jsdialog.ui-scrollwindow {
+	max-height: min-content;
+}
+
+#ServerAuditDialog #ServerAuditDialog-mainbox {
+	min-width: calc(min(800px, 80vw));
+}
+
+#ServerAuditDialog .ui-treeview {
+	border-color: transparent;
+}
+#ServerAuditDialog .ui-treeview td[role='gridcell'] {
+	padding-inline-start: 0;
+}
+#ServerAuditDialog tr:first-child th:first-child .ui-treeview-header-sort-icon:after {
+	display: none;
+}
+#ServerAuditDialog tr:first-child th:first-child .ui-treeview-header-sort-icon {
+	background: url('images/lc_serverauditheader.svg') no-repeat center;
+	width: 16px;
+	display: table-caption;
+	height: 16px;
 }

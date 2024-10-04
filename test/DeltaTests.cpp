@@ -42,31 +42,9 @@ class DeltaTests : public CPPUNIT_NS::TestFixture
     void testRandomDeltas();
     void testDeltaCopyOutOfBounds();
 
-    std::vector<char> loadPng(const char *relpath,
-                              png_uint_32& height,
-                              png_uint_32& width,
-                              png_uint_32& rowBytes)
-    {
-        std::ifstream file(relpath);
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        file.close();
-        std::vector<png_bytep> rows =
-            Png::decodePNG(buffer, height, width, rowBytes);
-        std::vector<char> output;
-        for (png_uint_32 y = 0; y < height; ++y)
-        {
-            for (png_uint_32 i = 0; i < width * 4; ++i)
-            {
-                output.push_back(rows[y][i]);
-            }
-        }
-        return output;
-    }
-
     std::vector<char> applyDelta(
         const std::vector<char> &pixmap,
-        png_uint_32 width, png_uint_32 height,
+        uint32_t width, uint32_t height,
         const std::vector<char> &delta,
         const std::string& testname);
 
@@ -157,7 +135,7 @@ void checkzDelta(const std::vector<char> &zDelta, const char *legend)
 // Quick hack for debugging
 std::vector<char> DeltaTests::applyDelta(
     const std::vector<char> &pixmap,
-    png_uint_32 width, png_uint_32 height,
+    uint32_t width, uint32_t height,
     const std::vector<char> &zDelta,
     const std::string& testname)
 {
@@ -304,11 +282,10 @@ void DeltaTests::testRleComplex()
 
     DeltaGenerator gen;
 
-    png_uint_32 height, width, rowBytes;
+    uint32_t height, width, rowBytes;
     const TileWireId textWid = 1;
     std::vector<char> text =
-        DeltaTests::loadPng(TDOC "/delta-graphic.png",
-                            height, width, rowBytes);
+        Png::loadPng(TDOC "/delta-graphic.png", height, width, rowBytes);
 
     DeltaGenerator::DeltaData data(
         textWid, reinterpret_cast<unsigned char*>(text.data()),
@@ -339,11 +316,10 @@ void DeltaTests::testRleIdentical()
 
     DeltaGenerator gen;
 
-    png_uint_32 height, width, rowBytes;
+    uint32_t height, width, rowBytes;
     const TileWireId textWid = 1;
     std::vector<char> text =
-        DeltaTests::loadPng(TDOC "/delta-graphic.png",
-                            height, width, rowBytes);
+        Png::loadPng(TDOC "/delta-graphic.png", height, width, rowBytes);
     LOK_ASSERT(height == 256 && width == 256 && rowBytes == 256*4);
     LOK_ASSERT_EQUAL(size_t(256 * 256 * 4), text.size());
 
@@ -352,8 +328,7 @@ void DeltaTests::testRleIdentical()
         0, 0, 256, 256, TileLocation(9, 9, 9, 0, 1), 256, 256);
 
     std::vector<char> text2 =
-        DeltaTests::loadPng(TDOC "/delta-graphic2.png",
-                            height, width, rowBytes);
+        Png::loadPng(TDOC "/delta-graphic2.png", height, width, rowBytes);
     LOK_ASSERT(height == 256 && width == 256 && rowBytes == 256*4);
     LOK_ASSERT_EQUAL(size_t(256 * 256 * 4), text2.size());
 
@@ -393,34 +368,34 @@ void DeltaTests::testDeltaSequence()
 
     DeltaGenerator gen;
 
-    png_uint_32 height, width, rowBytes;
+    uint32_t height, width, rowBytes;
     const TileWireId textWid = 1;
     std::vector<char> text =
-        DeltaTests::loadPng(TDOC "/delta-text.png",
-                            height, width, rowBytes);
+        Png::loadPng(TDOC "/delta-text.png", height, width, rowBytes);
     LOK_ASSERT(height == 256 && width == 256 && rowBytes == 256*4);
     LOK_ASSERT_EQUAL(size_t(256 * 256 * 4), text.size());
 
     const TileWireId text2Wid = 2;
     std::vector<char> text2 =
-        DeltaTests::loadPng(TDOC "/delta-text2.png",
-                            height, width, rowBytes);
+        Png::loadPng(TDOC "/delta-text2.png", height, width, rowBytes);
     LOK_ASSERT(height == 256 && width == 256 && rowBytes == 256*4);
     LOK_ASSERT_EQUAL(size_t(256 * 256 * 4), text2.size());
 
     std::vector<char> delta;
+    std::shared_ptr<DeltaGenerator::DeltaData> rleData;
+
     // Stash it in the cache
     LOK_ASSERT(gen.createDelta(
                        reinterpret_cast<unsigned char *>(&text[0]),
                        0, 0, width, height, width, height,
-                       TileLocation(1, 2, 3, 0, 1), delta, textWid, false, LOK_TILEMODE_RGBA) == false);
+                       TileLocation(1, 2, 3, 0, 1), delta, textWid, false, LOK_TILEMODE_RGBA, rleData) == false);
     LOK_ASSERT(delta.empty());
 
     // Build a delta between text2 & textWid
     LOK_ASSERT(gen.createDelta(
                        reinterpret_cast<unsigned char *>(&text2[0]),
                        0, 0, width, height, width, height,
-                       TileLocation(1, 2, 3, 0, 1), delta, text2Wid, false, LOK_TILEMODE_RGBA) == true);
+                       TileLocation(1, 2, 3, 0, 1), delta, text2Wid, false, LOK_TILEMODE_RGBA, rleData) == true);
     LOK_ASSERT(delta.size() > 0);
     checkzDelta(delta, "text2 to textWid");
 
@@ -433,7 +408,7 @@ void DeltaTests::testDeltaSequence()
     LOK_ASSERT(gen.createDelta(
                        reinterpret_cast<unsigned char *>(&text[0]),
                        0, 0, width, height, width, height,
-                       TileLocation(1, 2, 3, 0, 1), two2one, textWid, false, LOK_TILEMODE_RGBA) == true);
+                       TileLocation(1, 2, 3, 0, 1), two2one, textWid, false, LOK_TILEMODE_RGBA, rleData) == true);
     LOK_ASSERT(two2one.size() > 0);
     checkzDelta(two2one, "text to text2Wid");
 
@@ -452,34 +427,34 @@ void DeltaTests::testDeltaCopyOutOfBounds()
 
     DeltaGenerator gen;
 
-    png_uint_32 height, width, rowBytes;
+    uint32_t height, width, rowBytes;
     const TileWireId textWid = 1;
     std::vector<char> text =
-        DeltaTests::loadPng(TDOC "/delta-graphic.png",
-                            height, width, rowBytes);
+        Png::loadPng(TDOC "/delta-graphic.png", height, width, rowBytes);
     LOK_ASSERT(height == 256 && width == 256 && rowBytes == 256*4);
     LOK_ASSERT_EQUAL(size_t(256 * 256 * 4), text.size());
 
     const TileWireId text2Wid = 2;
     std::vector<char> text2 =
-        DeltaTests::loadPng(TDOC "/delta-graphic2.png",
-                            height, width, rowBytes);
+        Png::loadPng(TDOC "/delta-graphic2.png", height, width, rowBytes);
     LOK_ASSERT(height == 256 && width == 256 && rowBytes == 256*4);
     LOK_ASSERT_EQUAL(size_t(256 * 256 * 4), text2.size());
 
     std::vector<char> delta;
+    std::shared_ptr<DeltaGenerator::DeltaData> rleData;
+
     // Stash it in the cache
     LOK_ASSERT(gen.createDelta(
                        reinterpret_cast<unsigned char *>(&text[0]),
                        0, 0, width, height, width, height,
-                       TileLocation(1, 2, 3, 0, 1), delta, textWid, false, LOK_TILEMODE_RGBA) == false);
+                       TileLocation(1, 2, 3, 0, 1), delta, textWid, false, LOK_TILEMODE_RGBA, rleData) == false);
     LOK_ASSERT(delta.empty());
 
     // Build a delta between the two frames
     LOK_ASSERT(gen.createDelta(
                        reinterpret_cast<unsigned char *>(&text2[0]),
                        0, 0, width, height, width, height,
-                       TileLocation(1, 2, 3, 0, 1), delta, text2Wid, false, LOK_TILEMODE_RGBA) == true);
+                       TileLocation(1, 2, 3, 0, 1), delta, text2Wid, false, LOK_TILEMODE_RGBA, rleData) == true);
     LOK_ASSERT(delta.size() > 0);
     checkzDelta(delta, "copy out of bounds");
 

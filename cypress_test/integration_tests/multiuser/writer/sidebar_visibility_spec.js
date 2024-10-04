@@ -1,18 +1,12 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
 
 describe.skip(['tagmultiuser'], 'Sidebar visibility', function() {
-	var origTestFileName = 'sidebar_visibility.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer', undefined, true);
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('writer/sidebar_visibility.odt',true);
 	});
 
 	function testSidebarVisiblity(frameId1 ,frameId2) {

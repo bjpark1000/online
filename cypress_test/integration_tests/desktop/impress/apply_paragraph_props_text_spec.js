@@ -1,121 +1,122 @@
-/* global describe it cy beforeEach require afterEach*/
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var impressHelper = require('../../common/impress_helper');
 const desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Apply paragraph properties on selected shape.', function() {
-	var origTestFileName = 'apply_paragraph_props_text.odp';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'impress');
+		helper.setupAndLoadDocument('impress/apply_paragraph_props_text.odp');
 		desktopHelper.switchUIToCompact();
-		cy.cGet('#toolbar-up > .w2ui-scroll-right').click();
-		cy.cGet('#tb_editbar_item_modifypage').click();
-		impressHelper.selectTextShapeInTheCenter();
+		cy.cGet('#modifypage').scrollIntoView();
+		cy.cGet('#modifypage button').click();
+		cy.cGet('#sidebar-panel').should('not.be.visible');
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
+	function selectText() {
+		// Select the text in the shape by double
+		// clicking in the center of the shape,
+		// which is in the center of the slide,
+		// which is in the center of the document
 
-	it('Apply left/right alignment on selected text.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		// Only the svg (shape selection) is needed for the verifications,
+		// but the text needs to be selected for the subsequent button clicks
+
+		cy.cGet('#document-container').dblclick('center');
+		helper.typeIntoDocument('{ctrl}a');
+		helper.textSelectionShouldExist();
+	}
+
+	it('Apply horizontal alignment on selected text.', function() {
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 
-		impressHelper.selectTextOfShape();
-		cy.cGet('#tb_editbar_item_rightpara').click();
-		impressHelper.triggerNewSVGForShapeInTheCenter();
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		// Set right alignment
+		cy.cGet('#rightpara').click();
+
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '23586');
 
-		cy.cGet('#tb_editbar_item_leftpara').click();
-		impressHelper.triggerNewSVGForShapeInTheCenter();
+		// Set left alignment
+		cy.cGet('#leftpara').click();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'x', '1400');
-	});
-
-	it('Apply center alignment on selected text.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 
-		impressHelper.selectTextOfShape();
-		cy.cGet('#tb_editbar_item_centerpara').click();
-		impressHelper.triggerNewSVGForShapeInTheCenter();
+		// Set centered alignment
+		cy.cGet('#centerpara').click();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '12493');
-	});
 
-	it('Apply justified alignment on selected text.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'x', '1400');
+		// Set justified alignment
+		cy.cGet('#justifypara').click();
 
-		impressHelper.selectTextOfShape();
-		cy.cGet('#tb_editbar_item_rightpara').click();
-		impressHelper.triggerNewSVGForShapeInTheCenter();
-
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'x', '23586');
-
-		impressHelper.selectTextOfShape();
-		cy.cGet('#tb_editbar_item_justifypara').click();
-		impressHelper.triggerNewSVGForShapeInTheCenter();
-
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph .TextPosition')
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
 			.should('have.attr', 'x', '1400');
 	});
 
 	it('Apply default bulleting on selected text.', function() {
+		selectText();
 		// We have no bulleting by default
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .BulletChars')
+		cy.cGet('#document-container g.Page .BulletChars')
 			.should('not.exist');
 
-		impressHelper.selectTextOfShape();
-		cy.cGet('#tb_editbar_item_defaultbullet').click();
-		impressHelper.triggerNewSVGForShapeInTheCenter();
+		// Apply bulleting
+		cy.cGet('#defaultbullet').click();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .BulletChars')
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .BulletChars')
 			.should('exist');
 	});
 
 	it('Apply default numbering on selected text.', function() {
+		selectText();
 		// We have no bulleting by default
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .SVGTextShape tspan')
+		cy.cGet('#document-container g.Page .SVGTextShape tspan')
 			.should('not.have.attr', 'ooo:numbering-type');
 
-		impressHelper.selectTextOfShape();
-		cy.cGet('#tb_editbar_item_defaultnumbering').click();
-		impressHelper.triggerNewSVGForShapeInTheCenter();
+		// Apply numbering
+		cy.cGet('#defaultnumbering').click();
 
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .SVGTextShape tspan')
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .SVGTextShape tspan')
 			.should('have.attr', 'ooo:numbering-type', 'number-style');
 	});
 
 	it('Increase/decrease spacing of selected text.', function() {
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph:nth-of-type(2) tspan')
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph:nth-of-type(2) tspan')
 			.should('have.attr', 'y', '6600');
 
-		impressHelper.selectTextOfShape();
-		// Need to wait for click to work, not sure why
-		cy.wait(500);
-		cy.cGet('#tb_editbar_item_linespacing').click();
-		cy.cGet('body').contains('td','Increase Paragraph Spacing').click();
+		// Increase spacing
+		cy.cGet('#linespacing').click();
+		cy.cGet('#linespacing-dropdown .ui-combobox-entry').contains('Increase Paragraph Spacing').click();
 
-		impressHelper.triggerNewSVGForShapeInTheCenter();
-
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph:nth-of-type(2) tspan')
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph:nth-of-type(2) tspan')
 			.should('have.attr', 'y', '6700');
 
-		impressHelper.selectTextOfShape();
-		cy.cGet('#tb_editbar_item_linespacing').click();
-		cy.cGet('body').contains('td','Decrease Paragraph Spacing').click();
+		// Decrease spacing
+		cy.cGet('#linespacing').click();
+		cy.cGet('#linespacing-dropdown .ui-combobox-entry').contains('Decrease Paragraph Spacing').click();
 
-		impressHelper.triggerNewSVGForShapeInTheCenter();
-
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane g.Page .TextParagraph:nth-of-type(2) tspan')
+		impressHelper.removeShapeSelection();
+		selectText();
+		cy.cGet('#document-container g.Page .TextParagraph:nth-of-type(2) tspan')
 			.should('have.attr', 'y', '6600');
 	});
 });

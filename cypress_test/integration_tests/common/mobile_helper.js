@@ -4,7 +4,7 @@ var helper = require('./helper');
 
 // Enable editing if we are in read-only mode.
 function enableEditingMobile() {
-	cy.log('Enabling editing mode - start.');
+	cy.log('>> enableEditingMobile - start');
 
 	cy.cGet('#mobile-edit-button').click();
 
@@ -30,11 +30,11 @@ function enableEditingMobile() {
 			.should('be.visible');
 	});
 
-	cy.log('Enabling editing mode - end.');
+	cy.log('<< enableEditingMobile - end');
 }
 
 function longPressOnDocument(posX, posY) {
-	cy.log('Emulating a long press - start.');
+	cy.log('>> longPressOnDocument - start');
 	cy.log('Param - posX: ' + posX);
 	cy.log('Param - posY: ' + posY);
 
@@ -62,11 +62,11 @@ function longPressOnDocument(posX, posY) {
 				.trigger('pointerup', eventOptions);
 		});
 
-	cy.log('Emulating a long press - end.');
+	cy.log('<< longPressOnDocument - end');
 }
 
 function openHamburgerMenu() {
-	cy.log('Opening hamburger menu - start.');
+	cy.log('>> openHamburgerMenu - start');
 
 	cy.cGet('#toolbar-hamburger')
 		.should('not.have.class', 'menuwizard-opened');
@@ -80,11 +80,11 @@ function openHamburgerMenu() {
 	cy.cGet('#mobile-wizard-content-menubar')
 		.should('not.be.empty');
 
-	cy.log('Opening hamburger menu - end.');
+	cy.log('<< openHamburgerMenu - end');
 }
 
 function closeHamburgerMenu() {
-	cy.log('Closing hamburger menu - start.');
+	cy.log('>> closeHamburgerMenu - start');
 
 	cy.cGet('#toolbar-hamburger')
 		.should('have.class', 'menuwizard-opened');
@@ -98,46 +98,46 @@ function closeHamburgerMenu() {
 	cy.cGet('#mobile-wizard-content-menubar')
 		.should('not.exist');
 
-	cy.log('Closing hamburger menu - end.');
+	cy.log('<< closeHamburgerMenu - end');
 }
 
 function openMobileWizard() {
-	cy.log('Opening mobile wizard - start.');
+	cy.log('>> openMobileWizard - start');
 
-	helper.waitUntilIdle('#tb_actionbar_item_mobile_wizard');
+	helper.waitUntilIdle('#toolbar-up #mobile_wizard');
 	// Open mobile wizard
-	cy.cGet('#tb_actionbar_item_mobile_wizard')
+	cy.cGet('#toolbar-up #mobile_wizard')
 		.should('not.have.class', 'disabled')
 		.click();
 
 	// Mobile wizard is opened and it has content
 	cy.cGet('#mobile-wizard-content')
 		.should('not.be.empty');
-	cy.cGet('#tb_actionbar_item_mobile_wizard table')
-		.should('have.class', 'checked');
+	cy.cGet('#toolbar-up #mobile_wizard')
+		.should('have.class', 'selected');
 
-	cy.log('Opening mobile wizard - end.');
+	cy.log('<< openMobileWizard - end');
 }
 
 function closeMobileWizard() {
-	cy.log('Closing mobile wizard - start.');
+	cy.log('>> closeMobileWizard - start');
 
-	cy.cGet('#tb_actionbar_item_mobile_wizard table')
-		.should('have.class', 'checked');
+	cy.cGet('#toolbar-up #mobile_wizard')
+		.should('have.class', 'selected');
 
-	cy.cGet('#tb_actionbar_item_mobile_wizard')
+	cy.cGet('#toolbar-up #mobile_wizard')
 		.click();
 
 	cy.cGet('#mobile-wizard')
 		.should('not.be.visible');
-	cy.cGet('#tb_actionbar_item_mobile_wizard table')
-		.should('not.have.class', 'checked');
+	cy.cGet('#toolbar-up #mobile_wizard')
+		.should('not.have.class', 'selected');
 
-	cy.log('Closing mobile wizard - end.');
+	cy.log('<< closeMobileWizard - end');
 }
 
 function executeCopyFromContextMenu(XPos, YPos) {
-	cy.log('Executing copy from context menu - start.');
+	cy.log('>> executeCopyFromContextMenu - start');
 	cy.log('Param - XPos: ' + XPos);
 	cy.log('Param - YPos: ' + YPos);
 
@@ -155,69 +155,75 @@ function executeCopyFromContextMenu(XPos, YPos) {
 	cy.cGet('.vex-overlay')
 		.should('not.exist');
 
-	cy.log('Executing copy from context menu - end.');
+	cy.log('<< executeCopyFromContextMenu - end');
 }
 
 function openInsertionWizard() {
-	cy.log('Opening insertion wizard - start.');
+	cy.log('>> openInsertionWizard - start');
 
-	cy.cGet('#tb_actionbar_item_insertion_mobile_wizard')
-		.should('not.have.class', 'disabled')
+	cy.cGet('#toolbar-up #insertion_mobile_wizard')
+		.should('not.have.class', 'disabled');
+
+	cy.cGet('#toolbar-up #insertion_mobile_wizard button')
 		.click();
 
 	cy.cGet('#mobile-wizard-content')
 		.should('not.be.empty');
 
-	cy.cGet('#tb_actionbar_item_insertion_mobile_wizard table')
-		.should('have.class', 'checked');
+	cy.cGet('#toolbar-up #insertion_mobile_wizard')
+		.should('have.class', 'selected');
 
-	cy.log('Opening insertion wizard - end.');
+	cy.log('<< openInsertionWizard - end');
 }
 
 function openCommentWizard() {
-	cy.log('Opening Comment wizard - start.');
+	cy.log('>> openCommentWizard - start');
 
-	cy.cGet('#tb_actionbar_item_comment_wizard')
+	cy.cGet('#toolbar-up #comment_wizard')
 		.should('not.have.class', 'disabled')
+
+	cy.cGet('#toolbar-up #comment_wizard button')
 		.click();
 
-	cy.cGet('#tb_actionbar_item_comment_wizard table')
-		.should('have.class', 'checked');
+	cy.cGet('#toolbar-up #comment_wizard')
+		.should('have.class', 'selected');
 
-	cy.log('Opening Comment wizard - end.');
+	cy.log('<< openCommentWizard - end');
 }
 
 function closeInsertionWizard() {
-	cy.log('Closing insertion wizard - start.');
+	cy.log('>> closeInsertionWizard - start');
 
-	cy.cGet('#tb_actionbar_item_insertion_mobile_wizard table')
-		.should('have.class', 'checked');
+	cy.cGet('#toolbar-up #insertion_mobile_wizard')
+		.should('have.class', 'selected');
 
-	cy.cGet('#tb_actionbar_item_insertion_mobile_wizard')
+	cy.cGet('#toolbar-up #insertion_mobile_wizard')
 		.click();
 
 	cy.cGet('#mobile-wizard')
 		.should('not.be.visible');
 
-	cy.cGet('#tb_actionbar_item_insertion_mobile_wizard table')
-		.should('not.have.class', 'checked');
+	cy.cGet('#toolbar-up #insertion_mobile_wizard')
+		.should('not.have.class', 'selected');
 
-	cy.log('Closing insertion wizard - end.');
+	cy.log('<< closeInsertionWizard - end');
 }
 
 /// deprecated: see selectFromColorPicker function instead
 function selectFromColorPalette(paletteNum, groupNum, paletteAfterChangeNum, colorNum) {
-	cy.log('Selecting a color from the color palette - start.');
+	cy.log('>> selectFromColorPalette - start');
+
 	cy.cGet('#color-picker-' + paletteNum.toString() + '-basic-color-' + groupNum.toString()).click();
 	if (paletteAfterChangeNum !== undefined && colorNum !== undefined) {
 		cy.cGet('#color-picker-' + paletteAfterChangeNum.toString() + '-tint-' + colorNum.toString()).click();
 	}
 	cy.cGet('#mobile-wizard-back').click();
-	cy.log('Selecting a color from the color palette - end.');
+
+	cy.log('<< selectFromColorPalette - end');
 }
 
 function selectFromColorPicker(pickerId, groupNum, colorNum) {
-	cy.log('Selecting a color from the color palette - start.');
+	cy.log('>> selectFromColorPicker - start');
 
 	cy.cGet(pickerId + ' [id^=color-picker-][id$=-basic-color-' + groupNum.toString() + ']')
 		.click();
@@ -227,22 +233,33 @@ function selectFromColorPicker(pickerId, groupNum, colorNum) {
 			.click();
 	}
 
+	// TODO: Verify color is selected in picker
+	// See: https://github.com/CollaboraOnline/online/issues/9036
+
 	cy.cGet('#mobile-wizard-back')
 		.click();
 
-	cy.log('Selecting a color from the color palette - end.');
+	// TODO: Verify color is selected, as in:
+	//cy.cGet(pickerId + ' .color-sample-selected')
+	//    .should('have.attr', 'style', 'background-color: rgb(204, 0, 0);');
+
+	cy.log('<< selectFromColorPicker - end');
 }
 
 function openTextPropertiesPanel() {
+	cy.log('>> openTextPropertiesPanel - start');
+
 	openMobileWizard();
 
-	helper.clickOnIdle('#TextPropertyPanel');
+	cy.cGet('#TextPropertyPanel').click();
 
 	cy.cGet('#Bold').should('be.visible');
+
+	cy.log('<< openTextPropertiesPanel - end');
 }
 
 function selectHamburgerMenuItem(menuItems) {
-	cy.log('Selecting hamburger menu item - start.');
+	cy.log('>> selectHamburgerMenuItem - start');
 	cy.log('Param - menuItems: ' + menuItems);
 
 	openHamburgerMenu();
@@ -258,11 +275,12 @@ function selectHamburgerMenuItem(menuItems) {
 			}
 		}
 	}
-	cy.log('Selecting hamburger menu item - end.');
+
+	cy.log('<< selectHamburgerMenuItem - end');
 }
 
 function selectAnnotationMenuItem(menuItem) {
-	cy.log('Selecting annotation menu item - start.');
+	cy.log('>> selectAnnotationMenuItem - start');
 
 	cy.cGet('#mobile-wizard .wizard-comment-box .cool-annotation-menu')
 		.click({force: true});
@@ -273,41 +291,43 @@ function selectAnnotationMenuItem(menuItem) {
 	cy.cGet('body').contains('.context-menu-item', menuItem)
 		.click();
 
-	cy.log('Selecting annotation menu item - end.');
+	cy.log('<< selectAnnotationMenuItem - end');
 }
 
 function selectListBoxItem(listboxSelector, item) {
-	cy.log('Selecting an item from listbox - start.');
+	cy.log('>> selectListBoxItem - start');
 
-	helper.clickOnIdle(listboxSelector);
+	cy.cGet(listboxSelector).click();
 
-	helper.clickOnIdle('.mobile-wizard.ui-combobox-text', item);
+	cy.cGet('.mobile-wizard.ui-combobox-text', item).click();
 
 	// Combobox entry contains the selected item
 	cy.cGet(listboxSelector + ' .ui-header-right .entry-value')
 		.should('have.text', item);
 
-	cy.log('Selecting an item from listbox - end.');
+	cy.log('<< selectListBoxItem - end');
 }
 
 function selectListBoxItem2(listboxSelector, item) {
-	cy.log('Selecting an item from listbox 2 - start.');
+	cy.log('>> selectListBoxItem2 - start');
 
-	helper.clickOnIdle(listboxSelector);
+	cy.cGet(listboxSelector).click();
 
 	var endPos = listboxSelector.indexOf(' ');
 	if (endPos < 0)
 		endPos = listboxSelector.length;
 	var parentId = listboxSelector.substring(0, endPos);
 
-	helper.clickOnIdle(parentId + ' .ui-combobox-text', item);
+	cy.cGet(parentId + ' .ui-combobox-text', item).click();
 
 	cy.cGet(listboxSelector + ' .ui-header-left')
 		.should('have.text', item);
 
-	cy.log('Selecting an item from listbox 2 - end.');
+	cy.log('<< selectListBoxItem2 - end');
 }
 function insertComment() {
+	cy.log('>> insertComment - start');
+
 	openInsertionWizard();
 	cy.cGet('body').contains('.menu-entry-with-icon', 'Comment').click();
 	cy.cGet('.cool-annotation-table').should('exist');
@@ -315,9 +335,13 @@ function insertComment() {
 	cy.cGet('#response-ok').click();
 	cy.cGet('#comment-container-1').should('exist').wait(300);
 	cy.cGet('#annotation-content-area-1').should('have.text', 'some text');
+
+	cy.log('<< insertComment - end');
 }
 
 function insertImage() {
+	cy.log('>> insertImage - start');
+
 	openInsertionWizard();
 
 	// We can't use the menu item directly, because it would open file picker.
@@ -327,11 +351,15 @@ function insertImage() {
 	cy.cGet('#insertgraphic[type=file]')
 		.attachFile('/mobile/writer/image_to_insert.png');
 
-	cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g')
+	cy.cGet('#document-container svg g')
 		.should('exist');
+
+	cy.log('<< insertImage - end');
 }
 
 function deleteImage() {
+	cy.log('>> deleteImage - start');
+
 	insertImage();
 	var eventOptions = {
 		force: true,
@@ -339,7 +367,7 @@ function deleteImage() {
 		pointerType: 'mouse'
 	};
 
-	cy.cGet('.leaflet-control-buttons-disabled > .leaflet-interactive')
+	cy.cGet('.leaflet-layer')
 		.trigger('pointerdown', eventOptions)
 		.wait(500) // Wait for long press
 		.trigger('pointerup', eventOptions);
@@ -347,12 +375,18 @@ function deleteImage() {
 	cy.cGet('body').contains('.menu-entry-with-icon', 'Delete')
 		.should('be.visible').click();
 
-	cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g')
+	cy.cGet('#document-container svg g')
 		.should('not.exist');
+
+	cy.log('<< deleteImage - end');
 }
 
 function pressPushButtonOfDialog(name) {
+	cy.log('>> pressPushButtonOfDialog - start');
+
 	cy.cGet('body').contains('.ui-pushbutton', name).click();
+
+	cy.log('<< pressPushButtonOfDialog - end');
 }
 
 module.exports.enableEditingMobile = enableEditingMobile;

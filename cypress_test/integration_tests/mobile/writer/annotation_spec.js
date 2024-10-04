@@ -1,29 +1,21 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 
 describe(['tagmobile'], 'Annotation tests.', function() {
-	var origTestFileName = 'annotation.odt';
-	var testFileName;
+	var newFilePath;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		newFilePath = helper.setupAndLoadDocument('writer/annotation.odt');
 
-		// Click on edit button
 		mobileHelper.enableEditingMobile();
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
-
 	it('Saving comment.', { defaultCommandTimeout: 60000 }, function() {
-		cy.wait(1000);
 		mobileHelper.insertComment();
 		mobileHelper.selectHamburgerMenuItem(['File', 'Save']);
-		helper.reload(testFileName, 'writer', true);
+		helper.reloadDocument(newFilePath);
 		mobileHelper.enableEditingMobile();
 		mobileHelper.openCommentWizard();
 		helper.waitUntilIdle('#mobile-wizard-content', undefined);
@@ -40,7 +32,7 @@ describe(['tagmobile'], 'Annotation tests.', function() {
 		//cy.get('.blinking-cursor').should('be.visible');
 		cy.cGet('#input-modal-input').type('{home}modified ');
 		cy.cGet('#response-ok').click();
-		cy.cGet('#tb_actionbar_item_comment_wizard').click();
+		cy.cGet('#toolbar-up #comment_wizard').click();
 		cy.cGet('#comment-container-1').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text', 'modified some text');
 	});

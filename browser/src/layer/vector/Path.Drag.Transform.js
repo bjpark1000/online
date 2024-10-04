@@ -1,3 +1,5 @@
+/* -*- js-indent-level: 8 -*- */
+
 /**
  * Leaflet vector features drag functionality
  * @author Alexander Milevski <info@w8r.name>

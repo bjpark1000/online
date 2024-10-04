@@ -5,19 +5,14 @@
 // UPDATE_SCREENSHOT needs to be true otherwise cypress will not run the spec file and
 // update the screenshot
 
-/* global describe it cy require Cypress afterEach beforeEach */
+/* global describe it cy require Cypress beforeEach */
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 
 describe(['tagscreenshot'], 'Help dialog update', function() {
-	var testFileName = 'help_dialog.ods';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'calc');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('calc/help_dialog.ods');
 	});
 
 	it('Chart selected sidebar open', function() {
@@ -39,7 +34,7 @@ describe(['tagscreenshot'], 'Help dialog update', function() {
 		cy.cGet('#main-document-content').screenshot('chart-wizard');
 
 		cy.task('copyFile', {
-			sourceDir: Cypress.env('SCREENSHOT_FOLDER')+ '/calc/help_dialog_update_spec.js/',
+			sourceDir: Cypress.config('screenshotsFolder') + '/calc/help_dialog_update_spec.js/',
 			destDir: Cypress.env('IMAGES_FOLDER'),
 			fileName: 'chart-wizard.png',
 		});

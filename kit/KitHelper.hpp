@@ -87,7 +87,7 @@ namespace LOKitHelper
                 ptrValue = loKitDocument->pClass->getPartInfo(loKitDocument, i);
                 const std::string partinfo(ptrValue);
                 std::free(ptrValue);
-                for (const auto& prop : Util::JsonToMap(partinfo))
+                for (const auto& prop : JsonUtil::jsonToMap(partinfo))
                 {
                     const std::string& name = prop.first;
                     if (name == "visible")
@@ -112,9 +112,7 @@ namespace LOKitHelper
                     }
                     else if (name == "mode" && mode.empty())
                     {
-                        std::ostringstream modess;
-                        modess << prop.second;
-                        mode = modess.str();
+                        mode = prop.second;
                     }
                 }
             }

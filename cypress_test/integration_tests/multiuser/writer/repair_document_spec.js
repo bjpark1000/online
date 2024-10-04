@@ -1,18 +1,12 @@
-/* global describe it cy beforeEach require afterEach */
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 var repairHelper = require('../../common/repair_document_helper');
 
 describe.skip(['tagmultiuser'], 'Repair Document', function() {
-	var origTestFileName = 'repair_doc.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer', undefined, true);
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('writer/repair_doc.odt',true);
 	});
 
 	function repairDoc(frameId1, frameId2) {

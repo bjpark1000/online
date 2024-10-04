@@ -11,8 +11,10 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <memory>
+#include <vector>
 
 // This file hosts network related common functionality
 // and helper/utility functions and classes.
@@ -20,11 +22,38 @@
 
 class StreamSocket;
 class ProtocolHandlerInterface;
+struct addrinfo;
+struct sockaddr;
 
 namespace net
 {
 
 #if !MOBILEAPP
+
+class HostEntry
+{
+    std::string _requestName;
+    std::string _canonicalName;
+    std::vector<std::string> _ipAddresses;
+    std::shared_ptr<addrinfo> _ainfo;
+    int _errno;
+    int _eaino;
+
+    void setEAI(int eaino);
+
+    std::string makeIPAddress(const sockaddr* ai_addr);
+
+public:
+    HostEntry(const std::string& desc, const char* port);
+    ~HostEntry();
+
+    bool good() const { return _errno == 0 && _eaino == 0; }
+    std::string errorMessage() const;
+
+    const std::string& getCanonicalName() const { return  _canonicalName; }
+    const std::vector<std::string>& getAddresses() const { return  _ipAddresses; }
+    const addrinfo* getAddrInfo() const { return _ainfo.get(); }
+};
 
 /// Resolves the IP of the given hostname. On failure, returns @targetHost.
 std::string resolveHostAddress(const std::string& targetHost);
@@ -32,12 +61,25 @@ std::string resolveHostAddress(const std::string& targetHost);
 /// Returns true if @targetHost is on the same host.
 bool isLocalhost(const std::string& targetHost);
 
+/// Returns the canonical host name of the given IP address or host name.
+std::string canonicalHostName(const std::string& addressToCheck);
+
+/// Returns a vector containing the IPAddresses for the host.
+std::vector<std::string> resolveAddresses(const std::string& addressToCheck);
+
 #endif
 
 /// Connect to an end-point at the given host and port and return StreamSocket.
 std::shared_ptr<StreamSocket>
 connect(const std::string& host, const std::string& port, const bool isSSL,
         const std::shared_ptr<ProtocolHandlerInterface>& protocolHandler);
+
+typedef std::function<void(std::shared_ptr<StreamSocket>)> asyncConnectCB;
+
+void
+asyncConnect(const std::string& host, const std::string& port, const bool isSSL,
+             const std::shared_ptr<ProtocolHandlerInterface>& protocolHandler,
+             const asyncConnectCB& asyncCb);
 
 /// Connect to an end-point at the given @uri and return StreamSocket.
 std::shared_ptr<StreamSocket>

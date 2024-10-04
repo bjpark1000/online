@@ -11,6 +11,9 @@
 
 #pragma once
 
+// HostUtil is only used in non-mobile apps.
+#if !MOBILEAPP
+
 #include <Util.hpp>
 #include <Poco/URI.h>
 #include <Poco/Util/Application.h>
@@ -43,9 +46,6 @@ public:
     /// is accessed using different aliases
     static std::string getNewUri(const Poco::URI& uri);
 
-    /// add host to WopiHosts
-    static void addWopiHost(std::string host, bool allow);
-
     static bool allowedWopiHost(const std::string& host);
 
     static bool isWopiEnabled() { return WopiEnabled; }
@@ -54,6 +54,11 @@ public:
     static const Poco::URI getNewLockedUri(const Poco::URI& uri);
 
     static void setFirstHost(const Poco::URI& uri);
+
+private:
+    /// add host to WopiHosts
+    static void addWopiHost(const std::string& host, bool allow);
 };
+#endif // !MOBILEAPP
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

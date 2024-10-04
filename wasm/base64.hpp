@@ -29,6 +29,7 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <cstdint>
 #include <string>
 
 namespace macaron {
@@ -36,7 +37,7 @@ namespace macaron {
 class Base64 {
  public:
 
-  static std::string Encode(const std::string data) {
+  static std::string Encode(const std::string& data) {
     static constexpr char sEncodingTable[] = {
       'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
       'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
@@ -118,7 +119,7 @@ class Base64 {
       if (j < out_len) out[j++] = (triple >> 0 * 8) & 0xFF;
     }
 
-    return "";
+    return std::string();
   }
 
 };

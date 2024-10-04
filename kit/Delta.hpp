@@ -18,6 +18,9 @@
 #include <assert.h>
 #include <zlib.h>
 #include <zstd.h>
+#include <stdint.h>
+#include <endian.h>
+
 #include <Log.hpp>
 #include <Common.hpp>
 #include <FileUtil.hpp>
@@ -146,6 +149,38 @@ class DeltaGenerator {
         size_t sizeBytes()
         {
             return sizeof(DeltaBitmapRow) + _rleSize * 4;
+        }
+
+        // <rle data size> (byte), <bitmask>, [<unique pixel data>]
+        size_t packForNetwork(unsigned char *output,
+                              LibreOfficeKitTileMode mode) const
+        {
+            assert(_rleSize < 65536);
+
+            // we can RLE larger tiles - but just give
+            // up RLE'ing after 256 pixels
+            output[0] = _rleSize & 0xff;
+            output[1] = _rleSize >> 8;
+
+#if __BYTE_ORDER != __BIG_ENDIAN || defined(IOS)
+            memcpy(output + 2, _rleMask, sizeof(_rleMask));
+#else
+            // rare machine: little-endianize the bitmask if necessary:
+            uint64_t rleLE[DeltaGenerator::_rleMaskUnits];
+            for (size_t i = 0; i < DeltaGenerator::_rleMaskUnits; ++i)
+                rleLE[i] = htole64(_rleMask[i]);
+            memcpy(output + 2, rleLE, sizeof(rleLE));
+#endif
+            if (_rleSize > 0)
+                copy_row(output + 2 + sizeof(_rleMask),
+                         reinterpret_cast<const unsigned char *>(_rleData),
+                         _rleSize, mode);
+
+            size_t size = 2 + sizeof(_rleMask) + _rleSize * 4;
+            LOGA_TRC(Pixel,"packed row of size " << size << " bytes "
+                     << Util::dumpHex(std::string((char *)output, size)));
+
+            return size;
         }
 
     private:
@@ -312,7 +347,7 @@ class DeltaGenerator {
                               (const unsigned char *)(scratch),
                               diff, mode);
 
-                    LOG_TRC("row " << curY << " different " << diff << "pixels");
+                    LOGA_TRC(Pixel, "row " << curY << " different " << diff << "pixels");
                     x += diff;
                 }
             }
@@ -325,27 +360,24 @@ class DeltaGenerator {
         DeltaData(const DeltaData&) = delete;
         DeltaData& operator=(const DeltaData&) = delete;
 
-        DeltaData (TileWireId wid,
-                   unsigned char* pixmap, size_t startX, size_t startY,
-                   int width, int height,
-                   const TileLocation &loc, int bufferWidth, int bufferHeight
-            ) :
-            _loc(loc),
-            _inUse(false),
-            _wid(wid),
+        DeltaData(TileWireId wid, unsigned char* pixmap, size_t startX, size_t startY, int width,
+                  int height, const TileLocation& loc, int bufferWidth,
+                  [[maybe_unused]] int bufferHeight)
+            : _loc(loc)
+            , _inUse(false)
+            , _wid(wid)
+            ,
             // in Pixels
-            _width(width),
-            _height(height),
-            _rows(new DeltaBitmapRow[height])
+            _width(width)
+            , _height(height)
+            , _rows(new DeltaBitmapRow[height])
         {
             assert (startX + width <= (size_t)bufferWidth);
             assert (startY + height <= (size_t)bufferHeight);
 
-            (void)bufferHeight;
-
-            LOG_TRC("Converting pixel data to delta data of size "
-                    << (width * height * 4) << " width " << width
-                    << " height " << height);
+            LOGA_TRC(Pixel, "Converting pixel data to delta data of size "
+                     << (width * height * 4) << " width " << width
+                     << " height " << height);
 
             for (int y = 0; y < height; ++y)
             {
@@ -511,8 +543,8 @@ class DeltaGenerator {
             return false;
         }
 
-        LOG_TRC("building delta of a " << cur.getWidth() << 'x' << cur.getHeight() << " bitmap " <<
-                "between old wid " << prev.getWid() << " and " << cur.getWid());
+        LOGA_TRC(Pixel, "building delta of a " << cur.getWidth() << 'x' << cur.getHeight() << " bitmap " <<
+                 "between old wid " << prev.getWid() << " and " << cur.getWid());
 
         // let's use uint8_t instead of char to avoid implicit sign extension
         std::vector<uint8_t> output;
@@ -573,11 +605,11 @@ class DeltaGenerator {
             // Our row is just that different:
             prev.getRow(y).diffRowTo(cur.getRow(y), prev.getWidth(), y, output, mode);
         }
-        LOG_TRC("Created delta of size " << output.size());
+        LOGA_TRC(Pixel, "Created delta of size " << output.size());
         if (output.empty())
         {
             // The tile content is identical to what the client already has, so skip it
-            LOG_TRC("Identical / un-changed tile");
+            LOGA_TRC(Pixel, "Identical / un-changed tile");
             // Return a zero length delta to inform WSD we didn't need that.
             // This allows WSD side TileCache to send updates to waiting subscribers.
             outStream.push_back('D');
@@ -601,7 +633,7 @@ class DeltaGenerator {
             return false;
         }
 
-        LOG_TRC("Compressed delta of size " << output.size() << " to size " << compSize);
+        LOGA_TRC(Pixel, "Compressed delta of size " << output.size() << " to size " << compSize);
 //                << Util::dumpHex(std::string((char *)compressed.get(), compSize)));
 
         // FIXME: should get zstd to drop it directly in-place really.
@@ -665,8 +697,10 @@ class DeltaGenerator {
         const TileLocation &loc,
         std::vector<char>& output,
         TileWireId wid, bool forceKeyframe,
-        LibreOfficeKitTileMode mode)
+        LibreOfficeKitTileMode mode,
+        std::shared_ptr<DeltaData> &rleData)
     {
+        rleData = nullptr;
         if ((width & 0x1) != 0) // power of two - RGBA
         {
             LOG_TRC("Bad width to create deltas " << width);
@@ -697,6 +731,7 @@ class DeltaGenerator {
             if (it == _deltaEntries.end())
             {
                 _deltaEntries.insert(update);
+                rleData = update;
                 return false;
             }
             cacheEntry = *it;
@@ -714,7 +749,10 @@ class DeltaGenerator {
         // no two threads can be working on the same DeltaData.
         cacheEntry->replaceAndFree(update);
 
+        rleData = cacheEntry;
+
         cacheEntry->unuse();
+
         return delta;
     }
 
@@ -774,12 +812,14 @@ class DeltaGenerator {
             tileFile.write(pngOutput.data(), pngOutput.size());
         }
 
+        size_t spaceForBitmask = DeltaGenerator::_rleMaskUnits * 64/8;
+        std::shared_ptr<DeltaData> rleData;
         if (!createDelta(pixmap, startX, startY, width, height,
                          bufferWidth, bufferHeight,
-                         loc, output, wid, forceKeyframe, mode))
+                         loc, output, wid, forceKeyframe, mode, rleData))
         {
-            // FIXME: should stream it in =)
-            size_t maxCompressed = ZSTD_COMPRESSBOUND((size_t)width * height * 4);
+            assert(rleData);
+            size_t maxCompressed = ZSTD_COMPRESSBOUND((size_t)width * height * 4 + spaceForBitmask);
 
             std::unique_ptr<char, void (*)(void*)> compressed((char*)malloc(maxCompressed), free);
             if (!compressed)
@@ -797,16 +837,17 @@ class DeltaGenerator {
             outb.size = maxCompressed;
             outb.pos = 0;
 
-            unsigned char fixedupLine[width * 4];
+            unsigned char packedLine[2 + spaceForBitmask + width * 4];
 
-            // FIXME: should we RLE in pixels first ?
             for (int y = 0; y < height; ++y)
             {
-                copy_row(fixedupLine, pixmap + ((startY + y) * bufferWidth * 4) + (startX * 4), width, mode);
+                const DeltaBitmapRow& row = rleData->getRow(y);
+
+                size_t packedSize = row.packForNetwork(packedLine, mode);
 
                 ZSTD_inBuffer inb;
-                inb.src = fixedupLine;
-                inb.size = width * 4;
+                inb.src = packedLine;
+                inb.size = packedSize;
                 inb.pos = 0;
 
                 bool lastRow = (y == height - 1);
@@ -824,8 +865,8 @@ class DeltaGenerator {
             ZSTD_freeCCtx(cctx);
 
             size_t compSize = outb.pos;
-            LOG_TRC("Compressed image of size " << (width * height * 4) << " to size " << compSize);
-//                    << Util::dumpHex(std::string((char *)compressed, compSize)));
+            LOGA_TRC(Pixel, "Compressed image of size " << (width * height * 4) << " to size " << compSize);
+//            << Util::dumpHex(std::string((char *)compressed, compSize)));
 
             // FIXME: get zstd to compress directly into this buffer.
             output.push_back('Z');
@@ -868,7 +909,60 @@ class DeltaGenerator {
         }
         img->resize(dSize);
 
-        return img;
+
+        // cf. CanvasTileLayer's _applyDelta
+        size_t offset = 0;
+        constexpr size_t width = 256;
+        constexpr size_t height = 256;
+
+        Blob result = std::make_shared<BlobData>();
+        result->resize(width * height * 4);
+
+        for (size_t y = 0; y < height; ++y)
+        {
+            size_t rleSize = static_cast<unsigned char>((*img)[offset]) +
+                static_cast<unsigned char>((*img)[offset+1]) * 256;
+            offset += 2;
+            LOGA_TRC(Pixel, "rle size " << rleSize);
+
+            size_t rleMask = offset;
+            constexpr int rleMaskSizeBytes = 256/8;
+
+            offset += rleMaskSizeBytes;
+
+            uint32_t uniquePixels[256];
+            if (rleSize > 0) // align
+            {
+                // leave pre-multiplied.
+                memcpy(uniquePixels, img->data() + offset, rleSize * 4);
+            }
+
+            // It would be rather nice to have real 64bit types [!]
+            uint32_t lastPix = 0;
+            uint32_t lastMask = 0;
+            uint32_t bitToCheck = 256;
+            size_t rleMaskOffset = rleMask;
+
+            size_t pixOffset = y * width;
+            size_t pixSrc = 0;
+
+            for (size_t x = 0; x < width; ++x)
+            {
+                if (bitToCheck > 128)
+                {
+                    bitToCheck = 1;
+                    lastMask = (*img)[rleMaskOffset++];
+                }
+                if (!(lastMask & bitToCheck))
+                    lastPix = uniquePixels[pixSrc++];
+                bitToCheck = bitToCheck << 1;
+                (*result)[pixOffset++] = lastPix;
+            }
+
+            offset += rleSize * 4;
+        }
+
+        return result;
     }
 };
 

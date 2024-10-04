@@ -33,44 +33,33 @@ JSDialog.comboboxEntry = function (parentContainer, data, builder) {
 	if (data.hasSubMenu)
 		L.DomUtil.addClass(entry, 'ui-has-menu');
 
+	if (data.w2icon) {
+		// FIXME: DEPRECATED, this is legacy way to setup icon based on CSS class
+		L.DomUtil.create('div', 'w2ui-icon ui-combobox-icon ' + data.w2icon, entry);
+	}
+
+	if (data.icon) {
+		var icon = L.DomUtil.create('img', 'ui-combobox-icon', entry);
+		builder._isStringCloseToURL(data.icon) ? icon.src = data.icon : L.LOUtil.setImage(icon,  builder._createIconURL(data.icon), builder.map);
+	}
+
+	if (data.hint) {
+		entry.title = data.hint;
+	}
+
 	var content = L.DomUtil.create('span', '', entry);
 	content.innerText = data.text;
 
 	if (data.selected)
 		L.DomUtil.addClass(entry, 'selected');
 
-	if (data.customRenderer) {
-		var cachedComboboxEntries = builder.rendersCache[data.comboboxId];
-		var requestRender = true;
+	if (data.checked)
+		L.DomUtil.addClass(entry, 'checked');
+	else if (data.checked !== undefined)
+		L.DomUtil.addClass(entry, 'notchecked');
 
-		if (cachedComboboxEntries && cachedComboboxEntries.images[data.pos]) {
-			L.DomUtil.remove(content);
-			content = L.DomUtil.create('img', '', entry);
-			content.src = cachedComboboxEntries.images[data.pos];
-			content.alt = data.text;
-			requestRender = !cachedComboboxEntries.persistent;
-		}
-
-		if (requestRender) {
-			// render on demand
-			var onIntersection = function (entries) {
-				entries.forEach(function (entry) {
-					if (entry.isIntersecting) {
-						builder.callback('combobox', 'render_entry', {id: data.comboboxId},
-							data.pos + ';' + Math.floor(100 * window.devicePixelRatio) + ';' + Math.floor(100 * window.devicePixelRatio),
-							builder);
-					}
-				});
-			};
-
-			var observer = new IntersectionObserver(onIntersection, {
-				root: null,
-				threshold: 0.5 // percentage of visible area
-			});
-
-			observer.observe(content);
-		}
-	}
+	if (data.customRenderer)
+		JSDialog.OnDemandRenderer(builder, data.comboboxId, 'combobox', data.pos, content, entry, data.text);
 
 	var entryData = data.pos + ';' + data.text;
 
@@ -196,9 +185,15 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 
 	var content = L.DomUtil.create('input', 'ui-combobox-content ' + builder.options.cssClass, container);
 	content.value = data.text;
+	content.role = 'combobox';
+
+	if (data.aria) {
+		content.setAttribute('aria-label',data.aria.label);
+	}
 
 	var button = L.DomUtil.create('div', 'ui-combobox-button ' + builder.options.cssClass, container);
 	button.tabIndex = '0';
+	button.role = 'button';
 
 	var arrow = L.DomUtil.create('span', builder.options.cssClass + ' ui-listbox-arrow', button);
 	arrow.id = 'listbox-arrow-' + data.id;
@@ -223,8 +218,8 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 	};
 
 	if (data.enabled === false) {
-		container.setAttribute('disabled', '');
-		content.setAttribute('disabled', '');
+		container.disabled = true;
+		content.disabled = true;
 	}
 
 	JSDialog.SynchronizeDisabledState(container, [content]);
@@ -254,7 +249,7 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 		var callback = function(objectType, eventType, object, data) {
 			// send command with correct WindowId (from parent, not dropdown)
 			if (eventType !== 'close')
-				parentBuilder._defaultCallbackHandler(objectType, eventType, object, data, parentBuilder);
+				parentBuilder.callback(objectType, eventType, object, data, parentBuilder);
 
 			// close after selection
 			if (eventType === 'selected') {
@@ -272,7 +267,7 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 
 	button.addEventListener('click', clickFunction);
 	button.addEventListener('keypress', function (event) {
-		if (event.key === 'Enter')
+		if (event.key === 'Enter' || event.key === ' ')
 			clickFunction();
 	});
 
@@ -283,17 +278,20 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 
 		var dropdown = dropdownRoot.querySelectorAll('.ui-combobox-entry');
 		if (dropdown[pos]) {
-			dropdown[pos].innerHTML = '';
+			dropdown[pos].replaceChildren();
 			var img = L.DomUtil.create('img', '', dropdown[pos]);
 			img.src = builder.rendersCache[data.id].images[pos];
 			img.alt = entries[pos].text;
+			img.title = entries[pos].text;
 		}
 	};
 
 	container.onSelect = function (pos) {
 		resetSelection();
-		if (pos >= 0)
+		if (pos >= 0 && entries[pos])
 			entries[pos].selected = true;
+		else if (!entries[pos])
+			console.warn('Cannot find entry with pos: "' + pos + '" in "' + data.id + '"');
 	};
 
 	container.onSetText = function (text) {

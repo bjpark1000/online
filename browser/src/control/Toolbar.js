@@ -8,11 +8,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
+
 /*
  * Toolbar handler
  */
 
-/* global app $ window sanitizeUrl brandProductName brandProductURL _ w2ui */
+/* global app $ window brandProductName DocUtil _ */
+
 L.Map.include({
 
 	// a mapping of uno commands to more readable toolbar items
@@ -354,6 +356,9 @@ L.Map.include({
 	},
 
 	sendUnoCommand: function (command, json, force) {
+		if (command.indexOf('.uno:') < 0 && command.indexOf('vnd.sun.star.script') < 0)
+			console.error('Trying to send uno command without prefix: "' + command + '"');
+
 		if ((command.startsWith('.uno:Sidebar') && !command.startsWith('.uno:SidebarShow')) ||
 			command.startsWith('.uno:SlideChangeWindow') || command.startsWith('.uno:CustomAnimation') ||
 			command.startsWith('.uno:MasterSlidesPanel') || command.startsWith('.uno:ModifyPage') ||
@@ -377,10 +382,10 @@ L.Map.include({
 		var allowedCommands = ['.uno:Save', '.uno:WordCountDialog',
 			'.uno:Signature', '.uno:ShowResolvedAnnotations',
 			'.uno:ToolbarMode?Mode:string=notebookbar_online.ui', '.uno:ToolbarMode?Mode:string=Default',
-			'.uno:ExportToEPUB', '.uno:ExportToPDF', '.uno:ExportDirectToPDF', '.uno:MoveKeepInsertMode'];
-		if (this.isPermissionEditForComments()) {
+			'.uno:ExportToEPUB', '.uno:ExportToPDF', '.uno:ExportDirectToPDF', '.uno:MoveKeepInsertMode', '.uno:ShowRuler'];
+		if (app.isCommentEditingAllowed()) {
 			allowedCommands.push('.uno:InsertAnnotation','.uno:DeleteCommentThread', '.uno:DeleteAnnotation', '.uno:DeleteNote',
-				'.uno:DeleteComment', '.uno:ReplyComment', '.uno:ReplyToAnnotation', '.uno:ResolveComment',
+				'.uno:DeleteComment', '.uno:ReplyComment', '.uno:ReplyToAnnotation', '.uno:PromoteComment', '.uno:ResolveComment',
 				'.uno:ResolveCommentThread', '.uno:ResolveComment', '.uno:EditAnnotation', '.uno:ExportToEPUB', '.uno:ExportToPDF',
 				'.uno:ExportDirectToPDF');
 		}
@@ -391,16 +396,17 @@ L.Map.include({
 				break;
 			}
 		}
+
+		var map = this;
+
 		if (command.startsWith('.uno:SpellOnline')) {
-			var map = this;
 			var val = map['stateChangeHandler'].getItemValue('.uno:SpellOnline');
 
 			// proceed if the toggle button is pressed
 			if (val && (json === undefined || json === null)) {
 				 // because it is toggle, state has to be the opposite
 				var state = !(val === 'true');
-				if (window.isLocalStorageAllowed)
-					window.localStorage.setItem('SpellOnline', state);
+				window.prefs.set('SpellOnline', state);
 			}
 		}
 
@@ -410,9 +416,11 @@ L.Map.include({
 			&& !command.startsWith('.uno:ToolbarMode') && !force) {
 			console.debug('Cannot execute: ' + command + ' when dialog is opened.');
 			this.dialog.blinkOpenDialog();
-		} else if (this.isEditMode() || isAllowedInReadOnly) {
-			if (!this.messageNeedsToBeRedirected(command))
-				app.socket.sendMessage('uno ' + command + (json ? ' ' + JSON.stringify(json) : ''));
+		} else if ((this.isEditMode() || isAllowedInReadOnly) && !this.messageNeedsToBeRedirected(command)) {
+			app.socket.sendMessage('uno ' + command + (json ? ' ' + JSON.stringify(json) : ''));
+			// user interaction turns off the following of other users
+			if (map.userList && map._docLayer && map._docLayer._viewId)
+				map.userList.followUser(map._docLayer._viewId);
 		}
 	},
 
@@ -441,22 +449,22 @@ L.Map.include({
 		var i;
 		// Display keyboard shortcut or online help
 		if (id === 'keyboard-shortcuts-content') {
-			document.getElementById('online-help-content').style.display='none';
+			document.getElementById('online-help-content').classList.add('hide');
 			// Display help according to document opened
 			if (map.getDocType() === 'text') {
-				document.getElementById('text-shortcuts').style.display='block';
+				document.getElementById('text-shortcuts').classList.add('show');
 			}
 			else if (map.getDocType() === 'spreadsheet') {
-				document.getElementById('spreadsheet-shortcuts').style.display='block';
+				document.getElementById('spreadsheet-shortcuts').classList.add('show');
 			}
 			else if (map.getDocType() === 'presentation') {
-				document.getElementById('presentation-shortcuts').style.display='block';
+				document.getElementById('presentation-shortcuts').classList.add('show');
 			}
 			else if (map.getDocType() === 'drawing') {
-				document.getElementById('drawing-shortcuts').style.display='block';
+				document.getElementById('drawing-shortcuts').classList.add('show');
 			}
 		} else /* id === 'online-help' */ {
-			document.getElementById('keyboard-shortcuts-content').style.display='none';
+			document.getElementById('keyboard-shortcuts-content').classList.add('hide');
 			if (window.socketProxy) {
 				var helpdiv = document.getElementById('online-help-content');
 				var imgList = helpdiv.querySelectorAll('img');
@@ -470,19 +478,19 @@ L.Map.include({
 			if (map.getDocType() === 'text') {
 				var x = document.getElementsByClassName('text');
 				for (i = 0; i < x.length; i++) {
-					x[i].style.display = 'block';
+					x[i].classList.add('show');
 				}
 			}
 			else if (map.getDocType() === 'spreadsheet') {
 				x = document.getElementsByClassName('spreadsheet');
 				for (i = 0; i < x.length; i++) {
-					x[i].style.display = 'block';
+					x[i].classList.add('show');
 				}
 			}
 			else if (map.getDocType() === 'presentation' || map.getDocType() === 'drawing') {
 				x = document.getElementsByClassName('presentation');
 				for (i = 0; i < x.length; i++) {
-					x[i].style.display = 'block';
+					x[i].classList.add('show');
 				}
 			}
 		}
@@ -541,17 +549,173 @@ L.Map.include({
 			}
 		}
 
-		// Substitute %productName in Online Help and replace special Mac key names
+		// Substitute {productname} in Online Help and replace special Mac key names
 		if (id === 'online-help-content') {
 			var productNameContent = contentElement.querySelectorAll('span.productname');
 			for (i = 0, max = productNameContent.length; i < max; i++) {
-				productNameContent[i].innerHTML = productNameContent[i].innerHTML.replace(/%productName/g, productName);
+				productNameContent[i].innerHTML = productNameContent[i].innerHTML.replace('{productname}', productName);
 			}
 			document.getElementById('online-help-content').innerHTML = L.Util.replaceCtrlAltInMac(document.getElementById('online-help-content').innerHTML);
 		}
 		if (id === 'keyboard-shortcuts-content') {
 			document.getElementById('keyboard-shortcuts-content').innerHTML = L.Util.replaceCtrlAltInMac(document.getElementById('keyboard-shortcuts-content').innerHTML);
 		}
+		var searchInput = document.getElementById('online-help-search-input');
+		searchInput.setAttribute('placeholder',_('Search'));
+		searchInput.focus(); // auto focus on user input field
+		var helpContentParent = document.getElementsByClassName('ui-dialog-content')[0];
+		var startFilter = false;
+		var isAnyMatchingContent = false;
+		searchInput.addEventListener('input', function () {
+			// Hide all elements within the #online-help-content on first key stroke/at start of filter content
+			if (!startFilter || !isAnyMatchingContent) {
+				helpContentParent.style.backgroundColor = 'var(--color-background-dark) !important';
+				// Hide all <p> tags within .text, .spreadsheet, or .presentation sections
+				document.querySelectorAll('#online-help-content > *:not(a), .link-section p, .product-header').forEach(function (element) {
+					// Check if the element has class text, spreadsheet, or presentation
+					if (!element.classList.contains('text') && !element.classList.contains('spreadsheet') && !element.classList.contains('presentation')) {
+						this.hide(element);
+					}
+				}.bind(this));
+
+				startFilter = true;
+			}
+			var searchTerm = searchInput.value.trim();
+			// Reset highlighting and visibility if search term is empty
+			if (searchTerm === '') {
+				this.resetFilterResults();
+				startFilter = false;
+			}
+			else {
+				this.filterResults(searchTerm, isAnyMatchingContent, id);
+			}
+		}.bind(this));
+
+
+		const onlineHelpContent = document.getElementById('online-help-content');
+		const buttons = onlineHelpContent.querySelectorAll('.scroll-button');
+
+		buttons.forEach((button) => {
+			button.addEventListener('click', () => {
+				const targetId = button.dataset.target;
+				if (targetId) {
+					const targetElement = document.getElementById(`${targetId}`);
+					if (targetElement) {
+						targetElement.scrollIntoView();
+					}
+				}
+			});
+		});
+	},
+
+
+	filterResults: function (searchTerm, isAnyMatchingContent, id) {
+
+		var mainDiv = document.getElementById(id);
+		// Combine query parameters to select main sections
+		var mainSectionsQuery = '.section:not(div.text .section, div.spreadsheet .section, div.presentation .section)';
+		var docType = this.getDocType() === 'drawing' ? 'presentation' : this.getDocType();
+		mainSectionsQuery += ', div.' + docType + ' .section';
+
+		// Select nain sections elements within the mainDiv
+		var mainSections = mainDiv.querySelectorAll(mainSectionsQuery);
+		isAnyMatchingContent = false;
+
+		// Loop through each main section
+		mainSections.forEach(function (mainSection) {
+			// check header text matches or not
+			var headerText = mainSection.querySelector('.section-header').textContent.toLowerCase();
+			var containsTermInHeader = headerText.includes(searchTerm.toLowerCase());
+			// check main section text matches or not
+			var sectionText = mainSection.textContent.toLowerCase();
+			var containsTerm = sectionText.includes(searchTerm.toLowerCase());
+
+			//sub-section text matches or not
+			var subSections = mainSection.querySelectorAll('.sub-section');
+			var subSectionContainsTerm = false;
+
+			// if text matching with the main header then display full main section
+			if (containsTermInHeader) {
+				// first need to reset display of subsection
+				subSections.forEach(function(subSection) {
+					mainSection.style.backgroundColor = '';
+					mainSection.style.paddingInline = '';
+					mainSection.style.borderRadius = '';
+					this.show(subSection);
+				}.bind(this));
+				mainSection.style.backgroundColor = 'var(--color-background-lighter)';
+				mainSection.style.paddingInline = '12px';
+				mainSection.style.borderRadius = 'var(--border-radius-large)';
+				this.show(mainSection);
+			}
+			else {
+				// else Loop through each sub-section and display subsections with matching text has search term
+				subSections.forEach(function (subSection) {
+					// Highlight matching sub-sections
+					if (subSection.textContent.toLowerCase().includes(searchTerm.toLowerCase())) {
+						subSection.style.color = 'var(--color-text-darker)';
+						this.show(subSection);
+						mainSection.style.backgroundColor = 'var(--color-background-lighter)';
+						mainSection.style.paddingInline = '12px';
+						mainSection.style.borderRadius = 'var(--border-radius-large)';
+						// make sure main section of matched subsection is visible
+						this.show(mainSection);
+						subSectionContainsTerm = true;
+					} else {
+						subSection.style.color = ''; // Remove previous highlighting
+						this.hide(subSection);
+					}
+				}.bind(this));
+			}
+
+			if (!subSectionContainsTerm && !containsTerm) {
+				this.hide(mainSection);
+			}
+			else {
+				isAnyMatchingContent = true;
+			}
+
+		}.bind(this));
+
+		if (!isAnyMatchingContent) {
+			this.resetFilterResults();
+			$('#online-help-search-input').addClass('search-not-found');
+			setTimeout(function () {
+				$('#online-help-search-input').removeClass('search-not-found');
+			}, 800);
+		}
+	},
+
+	resetFilterResults: function () {
+		var helpContentParent = document.getElementsByClassName('ui-dialog-content')[0];
+		helpContentParent.style.backgroundColor='';
+		// Select main sections and make it visible
+		var mainSections = document.querySelectorAll('.section');
+		mainSections.forEach(function(mainSection) {
+			mainSection.style.backgroundColor = '';
+			this.show(mainSection);
+
+			var subSections = mainSection.querySelectorAll('.sub-section');
+			subSections.forEach(function(subSection) {
+				this.show(subSection);
+			}.bind(this));
+		}.bind(this));
+
+		// select all event scroll elements, main-header elements, product header elements and make visible to user if search term is empty
+		document.querySelectorAll('.m-v-0, .product-header, .help-dialog-header').forEach(function(element) {
+			this.show(element);
+			element.style.backgroundColor = '';
+		}.bind(this));
+	},
+
+	show: function(element) {
+		element.classList.remove('hide');
+		element.classList.add('show');
+	},
+
+	hide: function(element) {
+		element.classList.remove('show');
+		element.classList.add('hide');
 	},
 
 	_doOpenHelpFile: function(data, id, map) {
@@ -585,174 +749,28 @@ L.Map.include({
 		});
 	},
 
-	aboutDialogKeyHandler: function(event) {
-		if (event.key === 'd') {
-			this._debug.toggle();
-		} else if (event.key === 'l') {
-			// L toggges the Online logging level between the default (whatever
-			// is set in coolwsd.xml or on the coolwsd command line) and the
-			// most verbose a client is allowed to set (which also can be set in
-			// coolwsd.xml or on the coolwsd command line).
-			//
-			// In a typical developer "make run" setup, the default is "trace"
-			// so there is nothing more verbose. But presumably it is different
-			// in production setups.
-
-			app.socket.threadLocalLoggingLevelToggle = !app.socket.threadLocalLoggingLevelToggle;
-
-			var newLogLevel = (app.socket.threadLocalLoggingLevelToggle ? 'verbose' : 'default');
-
-			app.socket.sendMessage('loggingleveloverride ' + newLogLevel);
-
-			var logLevelInformation;
-			if (newLogLevel === 'default')
-				logLevelInformation = 'default (from coolwsd.xml)';
-			else if (newLogLevel === 'verbose')
-				logLevelInformation = 'most verbose (from coolwsd.xml)';
-			else if (newLogLevel === 'terse')
-				logLevelInformation = 'least verbose (from coolwsd.xml)';
-			else
-				logLevelInformation = newLogLevel;
-
-			console.debug('Log level: ' + logLevelInformation);
-		}
-	},
-
-	aboutDialogClickHandler: function(event) {
-		if (event.detail === 3) {
-			this._debug.toggle();
-		}
-	},
-
 	showLOAboutDialog: function() {
-		// Just as a test to exercise the Async Trace Event functionality, uncomment this
-		// line and the asyncTraceEvent.finish() below.
-		// var asyncTraceEvent = app.socket.createAsyncTraceEvent('cool-showLOAboutDialog');
-
-		var aboutDialogId = 'about-dialog';
-		// Move the div sitting in 'body' as content and make it visible
-		var content = document.getElementById(aboutDialogId).cloneNode(true);
-		content.style.display = 'block';
-
-		// fill product-name and product-string
-		var productName;
-		if (window.ThisIsAMobileApp) {
-			productName = window.MobileAppName;
-		} else {
-			productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Collabora Online Development Edition (unbranded)';
-		}
-		var productURL = (typeof brandProductURL !== 'undefined') ? brandProductURL : 'https://collaboraonline.github.io/';
-
-		content.querySelector('#product-name').innerText = productName;
-		content.classList.add('product-' + productName.split(/[ ()]+/).join('-').toLowerCase());
-
-		var productString = _('This version of %productName is powered by');
-		var productNameWithURL;
-		if (!window.ThisIsAMobileApp)
-			productNameWithURL = '<a href="' + sanitizeUrl(productURL) +
-								 '" target="_blank">' + productName + '</a>';
-		else
-			productNameWithURL = productName;
-
-		if (content.querySelector('#product-string'))
-			content.querySelector('#product-string').innerText = productString.replace('%productName', productNameWithURL);
-
-		if (window.socketProxy)
-			content.querySelector('#slow-proxy').innerText = _('"Slow Proxy"');
-
-		var map = this;
-		if (window.indirectSocket)
-			content.querySelector('#routeToken').innerText = 'RouteToken: ' + window.routeToken;
-
-		map.uiManager.showYesNoButton(aboutDialogId + '-box', productName, '', _('OK'), null, null, null, true);
-		var box = document.getElementById(aboutDialogId + '-box');
-		var innerDiv = L.DomUtil.create('div', '', null);
-		box.insertBefore(innerDiv, box.firstChild);
-		innerDiv.innerHTML = content.outerHTML;
-
-		var form = document.getElementById('about-dialog-box');
-
-		form.addEventListener('click', this.aboutDialogClickHandler.bind(this));
-		form.addEventListener('keyup', this.aboutDialogKeyHandler.bind(this));
-		form.querySelector('#coolwsd-version').querySelector('a').focus();
-		var copyversion = L.DomUtil.create('button', 'ui-pushbutton jsdialog', null);
-		copyversion.setAttribute('id', 'modal-dialog-about-dialog-box-copybutton');
-		copyversion.setAttribute('title', _('Copy all version information in English'));
-		var img = L.DomUtil.create('img', null, null);
-		L.LOUtil.setImage(img, 'lc_copy.svg', map);
-		copyversion.innerHTML = '<img src="' + img.src +'" width="18px" height="18px">';
-		copyversion.addEventListener('click', this.copyVersionInfoToClipboard.bind(this));
-		map.uiManager.enableTooltip(copyversion);
-		var aboutok = document.getElementById('modal-dialog-about-dialog-box-yesbutton');
-		if (aboutok) {
-			aboutok.before(copyversion);
-		}
-	},
-
-	getVersionInfoFromClass: function(className) {
-		var versionElement = document.getElementById(className);
-		var versionInfo = versionElement.innerText;
-
-		var gitHashIndex = versionInfo.indexOf('git hash');
-		if (gitHashIndex > -1) {
-		  versionInfo = versionInfo.slice(0, gitHashIndex) + '(' + versionInfo.slice(gitHashIndex) + ')';
-		}
-
-		return versionInfo;
-	},
-
-	copyVersionInfoToClipboard: function() {
-		var text = 'COOLWSD version: ' + this.getVersionInfoFromClass('coolwsd-version') + '\n';
-		text += 'LOKit version: ' + this.getVersionInfoFromClass('lokit-version') + '\n';
-		text += 'Served by: ' + document.getElementById('os-info').innerText + '\n';
-		text += 'Server ID: ' + document.getElementById('coolwsd-id').innerText + '\n';
-
-		if (navigator.clipboard && window.isSecureContext) {
-			navigator.clipboard.writeText(text)
-			.then(function() {
-				window.console.log('Text copied to clipboard');
-				this.contentHasBeenCopiedShowSnackbar();
-			}.bind(this))
-			.catch(function(error) {
-				window.console.error('Error copying text to clipboard:', error);
-			});
-		} else {
-			var textArea = document.createElement('textarea');
-			textArea.style.position = 'absolute';
-			textArea.style.opacity = 0;
-			textArea.value = text;
-			document.body.appendChild(textArea);
-			textArea.select();
-			try {
-				document.execCommand('copy');
-				window.console.log('Text copied to clipboard');
-				this.contentHasBeenCopiedShowSnackbar();
-			} catch (error) {
-				window.console.error('Error copying text to clipboard:', error);
-			} finally {
-				document.body.removeChild(textArea);
-			}
-		}
-	},
-
-	contentHasBeenCopiedShowSnackbar: function() {
-		var timeout = 1000;
-		this.uiManager.showSnackbar('Version information has been copied', null, null, timeout);
-		var copybutton = document.querySelector('#modal-dialog-about-dialog-box-copybutton > img');
-		L.LOUtil.setImage(copybutton, 'lc_clipboard-check.svg', this);
-		setTimeout(function () {
-			L.LOUtil.setImage(copybutton, 'lc_copy.svg', this);
-		}.bind(this), timeout);
+		this.aboutDialog.show();
 	},
 
 	extractContent: function(html) {
+		html = DocUtil.stripHTML(html);
 		var parser = new DOMParser;
 		return parser.parseFromString(html, 'text/html').documentElement.getElementsByTagName('body')[0].textContent;
 	},
 
 	makeURLFromStr: function(str) {
-		if (!(str.toLowerCase().startsWith('http://') || str.toLowerCase().startsWith('https://'))) {
-			str = 'http://' + str;
+		str = str.trim();
+		const lowerStr = str.toLowerCase();
+
+		if (!(lowerStr.startsWith('http://') || lowerStr.startsWith('https://') ||
+			  lowerStr.startsWith('ftp://') || lowerStr.startsWith('mailto:'))) {
+			// Regular expression to test if the string is an email address
+			const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+			if (emailPattern.test(str))
+				str = 'mailto:' + str;
+			else
+				str = 'http://' + str;
 		}
 		return str;
 	},
@@ -761,6 +779,11 @@ L.Map.include({
 		var map = this;
 		var id = 'hyperlink';
 		var title = _('Insert hyperlink');
+
+		let focusId = 'hyperlink-link-box-input';
+		if (defaultText === '') {
+			focusId = 'hyperlink-text-box';
+		}
 
 		var dialogId = 'modal-dialog-' + id;
 		var json = map.uiManager._modalDialogJSON(id, title, true, [
@@ -807,12 +830,12 @@ L.Map.include({
 				vertical: false,
 				layoutstyle: 'end'
 			},
-		], 'hyperlink-link-box');
+		], focusId);
 
 		map.uiManager.showModal(json, [
 			{id: 'response-ok', func: function() {
 				var text = document.getElementById('hyperlink-text-box');
-				var link = document.getElementById('hyperlink-link-box');
+				var link = document.getElementById('hyperlink-link-box-input');
 
 				if (link.value != '') {
 					if (!text.value || text.value === '')
@@ -843,7 +866,12 @@ L.Map.include({
 			text = this.hyperlinkUnderCursor.text;
 		} else if (this._clip && this._clip._selectionType == 'text') {
 			if (map['stateChangeHandler'].getItemValue('.uno:Copy') === 'enabled') {
-				text = this.extractContent(this._clip._selectionContent);
+				if (L.Browser.hasNavigatorClipboardWrite) {
+					// Async copy, trigger fetching the text selection.
+					app.socket.sendMessage('gettextselection mimetype=text/html,text/plain;charset=utf-8');
+				} else {
+					text = this.extractContent(this._clip._selectionContent);
+				}
 			}
 		} else if (this._docLayer._selectedTextContent) {
 			text = this.extractContent(this._docLayer._selectedTextContent);
@@ -864,21 +892,23 @@ L.Map.include({
 		if (this.hyperlinkUnderCursor && this.hyperlinkUnderCursor.link)
 			link = this.hyperlinkUnderCursor.link;
 
-		this._createAndRunHyperlinkDialog(text ? text.trim() : '', link);
+		this._createAndRunHyperlinkDialog(text ? text.replace(/^[\n\r]+|[\n\r]+$/g, '') : '', link);
 	},
 
 	cancelSearch: function() {
-		var toolbar = window.mode.isMobile() ? w2ui['searchbar'] : w2ui['actionbar'];
+		var toolbar = window.mode.isMobile() ? app.map.mobileSearchBar: app.map.statusBar;
 		var searchInput = L.DomUtil.get('search-input');
 		this.resetSelection();
-		toolbar.hide('cancelsearch');
-		toolbar.disable('searchprev');
-		toolbar.disable('searchnext');
+		if (toolbar) {
+			toolbar.showItem('cancelsearch', false);
+			toolbar.enableItem('searchprev', false);
+			toolbar.enableItem('searchnext', false);
+		}
 		searchInput.value = '';
 		if (window.mode.isMobile()) {
 			searchInput.focus();
 			// odd, but on mobile we need to invoke it twice
-			toolbar.hide('cancelsearch');
+			toolbar.showItem('cancelsearch', false);
 		}
 
 		this._onGotFocus();
@@ -917,265 +947,57 @@ L.Map.include({
 		map.fire('postMessage', {msgId: 'UI_SaveAs', args: {format: format}});
 	},
 
+	onFormulaBarFocus: function() {
+		if (window.mode.isMobile() === true) {
+			var mobileTopBar = this.mobileTopBar;
+			mobileTopBar.showItem('undo', false);
+			mobileTopBar.showItem('redo', false);
+			mobileTopBar.showItem('cancelformula', true);
+			mobileTopBar.showItem('acceptformula', true);
+		} else {
+			var jsdialogFormulabar = this.formulabar;
+			jsdialogFormulabar.hide('startformula');
+			jsdialogFormulabar.hide('AutoSumMenu');
+			jsdialogFormulabar.show('cancelformula');
+			jsdialogFormulabar.show('acceptformula');
+		}
+	},
+
+	onFormulaBarBlur: function() {
+		var map = this;
+
+		if (window.mode.isMobile() && this.isEditMode()) {
+			var mobileTopBar = map.mobileTopBar;
+			mobileTopBar.showItem('cancelformula', false);
+			mobileTopBar.showItem('acceptformula', false);
+			mobileTopBar.showItem('undo', true);
+			mobileTopBar.showItem('redo', true);
+		} else {
+			var jsdialogFormulabar = map.formulabar;
+			jsdialogFormulabar.hide('cancelformula');
+			jsdialogFormulabar.hide('acceptformula');
+			jsdialogFormulabar.show('startformula');
+			jsdialogFormulabar.show('AutoSumMenu');
+		}
+
+		$('#AutoSumMenu-button').css('margin-inline', '0');
+		$('#AutoSumMenu .unoarrow').css('margin', '0');
+
+		map.formulabar.blurField();
+		$('#addressInput-input').blur();
+	},
+
 	formulabarBlur: function() {
 		if (!this.uiManager.isAnyDialogOpen())
 			this.focus();
 	},
 
 	formulabarFocus: function() {
-		this.formulabar.focus();
+		this.formulabar.focusField();
 	},
 
 	formulabarSetDirty: function() {
 		if (this.formulabar)
 			this.formulabar.dirty = true;
-	},
-
-	setAccessibilityState: function(enable) {
-		if (this._accessibilityState === enable)
-			return;
-		this._accessibilityState = enable;
-		app.socket.sendMessage('a11ystate ' + enable);
-
-		this.removeLayer(this._textInput);
-		this._textInput = enable ? L.a11yTextInput() : L.textInput();
-		this.addLayer(this._textInput);
-		if (enable) {
-			this._textInput._requestFocusedParagraph();
-		}
-		this._textInput.showCursor();
-	},
-
-	// map.dispatch() will be used to call some actions so we can share the code
-	dispatch: function(action) {
-		// Don't allow to execute new actions while any dialog is visible.
-		// It prevents launching multiple instances of the same dialog.
-		if (this.dialog.hasOpenedDialog() || (this.jsdialog && this.jsdialog.hasDialogOpened())) {
-			this.dialog.blinkOpenDialog();
-			console.debug('Cannot dispatch: ' + action + ' when dialog is opened.');
-			return;
-		}
-
-		if (action.indexOf('saveas-') === 0) {
-			var format = action.substring('saveas-'.length);
-			this.openSaveAs(format);
-			return;
-		} else if (action.indexOf('downloadas-') === 0) {
-			var format = action.substring('downloadas-'.length);
-			var fileName = this['wopi'].BaseFileName;
-			fileName = fileName.substr(0, fileName.lastIndexOf('.'));
-			fileName = fileName === '' ? 'document' : fileName;
-			this.downloadAs(fileName + '.' + format, format);
-			return;
-		} if (action.indexOf('exportas-') === 0) {
-			var format = action.substring('exportas-'.length);
-			this.openSaveAs(format);
-			return;
-		}
-
-		switch (action) {
-		case 'acceptformula':
-			{
-				if (window.mode.isMobile()) {
-					this.focus();
-					this._docLayer.postKeyboardEvent('input',
-						this.keyboard.keyCodes.enter,
-						this.keyboard._toUNOKeyCode(this.keyboard.keyCodes.enter));
-				} else {
-					this.sendUnoCommand('.uno:AcceptFormula');
-				}
-
-				this.onFormulaBarBlur();
-				this.formulabarBlur();
-				this.formulabarSetDirty();
-			}
-			break;
-		case 'cancelformula':
-			{
-				this.sendUnoCommand('.uno:Cancel');
-				this.onFormulaBarBlur();
-				this.formulabarBlur();
-				this.formulabarSetDirty();
-			}
-			break;
-		case 'startformula':
-			{
-				this.sendUnoCommand('.uno:StartFormula');
-				this.onFormulaBarFocus();
-				this.formulabarFocus();
-				this.formulabarSetDirty();
-			}
-			break;
-		case 'functiondialog':
-			{
-				if (window.mode.isMobile() && this._functionWizardData) {
-					this._docLayer._closeMobileWizard();
-					this._docLayer._openMobileWizard(this._functionWizardData);
-					this.formulabarSetDirty();
-				} else {
-					this.sendUnoCommand('.uno:FunctionDialog');
-				}
-			}
-			break;
-		case 'remotelink':
-			this.fire('postMessage', { msgId: 'UI_PickLink' });
-			break;
-		case 'zoteroaddeditcitation':
-			{
-				this.zotero.handleItemList();
-			}
-			break;
-		case 'zoterosetdocprefs':
-			{
-				this.zotero.handleStyleList();
-			}
-			break;
-		case 'zoteroaddeditbibliography':
-			{
-				this.zotero.insertBibliography();
-			}
-			break;
-		case 'zoteroaddnote':
-			{
-				this.zotero.handleInsertNote();
-			}
-			break;
-		case 'zoterorefresh':
-			{
-				this.zotero.refreshCitationsAndBib();
-			}
-			break;
-		case 'zoterounlink':
-			{
-				this.zotero.unlinkCitations();
-			}
-			break;
-		case 'exportpdf':
-			{
-				this.sendUnoCommand('.uno:ExportToPDF', {
-					'SynchronMode': {
-						'type': 'boolean',
-						'value': false
-					}
-				});
-			}
-			break;
-		case 'exportdirectpdf':
-			{
-				this.sendUnoCommand('.uno:ExportDirectToPDF', {
-					'SynchronMode': {
-						'type': 'boolean',
-						'value': false
-					}
-				});
-			}
-			break;
-		case 'exportepub':
-			{
-				this.sendUnoCommand('.uno:ExportToEPUB', {
-					'SynchronMode': {
-						'type': 'boolean',
-						'value': false
-					}
-				});
-			}
-			break;
-		case 'deletepage':
-			{
-				var map = this;
-				var msg;
-				if (map.getDocType() === 'presentation') {
-					msg = _('Are you sure you want to delete this slide?');
-				}
-				else { /* drawing */
-					msg = _('Are you sure you want to delete this page?');
-				}
-				map.uiManager.showInfoModal('deleteslide-modal', _('Delete'),
-					msg, '', _('OK'), function () { map.deletePage(); }, true, 'deleteslide-modal-response');
-			}
-			break;
-		case 'hyperlinkdialog':
-			this.showHyperlinkDialog();
-			break;
-		case 'rev-history':
-			this.openRevisionHistory();
-			break;
-		case 'shareas':
-			this.openShare();
-			break;
-		case 'presentation':
-			this.fire('fullscreen');
-			break;
-		case 'presentinwindow':
-			this.fire('presentinwindow');
-			break;
-		case 'charmapcontrol':
-			this.sendUnoCommand('.uno:InsertSymbol');
-			break;
-		case 'closetablet':
-			this.uiManager.enterReadonlyOrClose();
-			break;
-		case 'showresolvedannotations':
-			var items = this['stateChangeHandler'];
-			var val = items.getItemValue('.uno:ShowResolvedAnnotations');
-			val = (val === 'true' || val === true);
-			this.showResolvedComments(!val);
-			break;
-		case 'toggledarktheme':
-			this.uiManager.toggleDarkMode();
-			break;
-		case 'home-search':
-			this.uiManager.focusSearch();
-			break;
-		case 'renamedocument':
-			this.uiManager.renameDocument();
-			break;
-		case 'togglewasm':
-			this.uiManager.toggleWasm();
-			break;
-		case 'print-active-sheet':
-			this.sendUnoCommand('.uno:DeletePrintArea');
-			var currentSheet = this._docLayer._selectedPart + 1;
-			var options  = {
-				ExportFormFields: {
-					type: 'boolean',
-					value: false
-				},
-				ExportNotes: {
-					type: 'boolean',
-					value: false
-				},
-				SheetRange: {
-					type: 'string',
-					value: currentSheet + '-' + currentSheet
-				}
-			};
-			options = JSON.stringify(options);
-			this.print(options);
-			break;
-		case 'print-all-sheets':
-			this.sendUnoCommand('.uno:DeletePrintArea');
-			this.print();
-			break;
-		case 'savecomments':
-			if (this.isPermissionEditForComments()) {
-				this.fire('postMessage', {msgId: 'UI_Save'});
-				if (!this._disableDefaultAction['UI_Save']) {
-					this.save(false, false);
-				}
-			}
-			break;
-		case 'acceptalltrackedchanges':
-			this.sendUnoCommand('.uno:AcceptAllTrackedChanges');
-			app.socket.sendMessage('commandvalues command=.uno:ViewAnnotations');
-			break;
-		case 'rejectalltrackedchanges':
-			this.sendUnoCommand('.uno:RejectAllTrackedChanges');
-			var commentSection = app.sectionContainer.getSectionWithName(L.CSections.CommentList.name);
-			commentSection.rejectAllTrackedCommentChanges();
-			break;
-		default:
-			console.error('unknown dispatch: "' + action + '"');
-		}
 	},
 });

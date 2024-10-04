@@ -1,17 +1,11 @@
-/* global describe it cy beforeEach require afterEach*/
+/* global describe it cy beforeEach require */
 
 var helper = require('../../common/helper');
 
 describe.skip(['tagmultiuser'], 'Track Changes', function () {
-	var origTestFileName = 'track_changes.odt';
-	var testFileName;
 
 	beforeEach(function () {
-		testFileName = helper.beforeAll(origTestFileName, 'writer', undefined, true);
-	});
-
-	afterEach(function () {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('writer/track_changes.odt',true);
 	});
 
 	function confirmChange(action) {

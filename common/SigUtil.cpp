@@ -12,6 +12,7 @@
 #include <config.h>
 
 #include "SigUtil.hpp"
+#include "SigHandlerTrap.hpp"
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #  include <execinfo.h>
@@ -23,6 +24,10 @@
 #include <poll.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
+#if !defined(ANDROID) && !defined(IOS) && !defined(__FreeBSD__)
+#  include <sys/prctl.h>
+#endif
 
 #include <atomic>
 #include <cassert>
@@ -63,14 +68,15 @@ static std::atomic<bool> ForwardSigUsr2Flag(false); //< Flags to forward SIG_USR
 #endif
 #endif
 
-static size_t ActivityStringIndex = 0;
-static std::string ActivityHeader = "";
-static std::array<std::string, 16> ActivityStrings;
+static std::atomic<size_t> ActivityStringIndex = 0;
+static std::string ActivityHeader;
+static std::array<std::atomic<char *>, 16> ActivityStrings;
 static bool UnattendedRun = false;
 #if !MOBILEAPP
 static int SignalLogFD = STDERR_FILENO; //< The FD where signalLogs are dumped.
 static char* VersionInfo = nullptr;
 static char FatalGdbString[256] = { '\0' };
+static SigUtil::SigChildHandler SigChildHandle;
 #endif
 
 } // namespace
@@ -87,10 +93,11 @@ void setTerminationFlag()
     // Set the forced-termination flag.
     RunStateFlag = RunState::Terminate;
 
-#if !MOBILEAPP
+    if (!Util::isMobileApp())
+    {
         // And wake-up the thread.
         SocketPoll::wakeupWorld();
-#endif
+    }
 }
 
 void requestShutdown()
@@ -105,7 +112,7 @@ void requestShutdown()
 #endif
 #endif // !IOS
 
-    void checkDumpGlobalState(GlobalDumpStateFn dumpState)
+    void checkDumpGlobalState([[maybe_unused]] GlobalDumpStateFn dumpState)
     {
 #if !MOBILEAPP
         assert(dumpState && "Invalid callback for checkDumpGlobalState");
@@ -114,12 +121,10 @@ void requestShutdown()
             DumpGlobalState = false;
             dumpState();
         }
-#else
-        (void) dumpState;
 #endif
     }
 
-    void checkForwardSigUsr2(ForwardSigUsr2Fn forwardSigUsr2)
+    void checkForwardSigUsr2([[maybe_unused]] ForwardSigUsr2Fn forwardSigUsr2)
     {
 #if !MOBILEAPP
         assert(forwardSigUsr2 && "Invalid callback for checkForwardSigUsr2");
@@ -128,8 +133,6 @@ void requestShutdown()
             ForwardSigUsr2Flag = false;
             forwardSigUsr2();
         }
-#else
-        (void) forwardSigUsr2;
 #endif
     }
 
@@ -140,7 +143,10 @@ void requestShutdown()
 
     void addActivity(const std::string &message)
     {
-        ActivityStrings[ActivityStringIndex++ % ActivityStrings.size()] = message;
+        char *old = ActivityStrings[ActivityStringIndex++ % ActivityStrings.size()].exchange(
+            strdup(message.c_str()));
+        if (old)
+            free (old);
     }
 
     void addActivity(const std::string &viewId, const std::string &message)
@@ -226,37 +232,6 @@ void requestShutdown()
         signalLog(buf + i + 1);
     }
 
-    /// This traps the signal-handler so we don't _Exit
-    /// while dumping stack trace. It's re-entrant.
-    /// Used to safely increment and decrement the signal-handler trap.
-    class SigHandlerTrap
-    {
-        static std::atomic<int> SigHandling;
-    public:
-        SigHandlerTrap() { ++SigHandlerTrap::SigHandling; }
-        ~SigHandlerTrap() { --SigHandlerTrap::SigHandling; }
-
-        /// Check that we have exclusive access to the trap.
-        /// Otherwise, there is another signal in progress.
-        bool isExclusive() const
-        {
-            // Return true if we are alone.
-            return SigHandlerTrap::SigHandling == 1;
-        }
-
-        /// Wait for the trap to clear.
-        static void wait()
-        {
-            while (SigHandlerTrap::SigHandling)
-                sleep(1);
-        }
-    };
-    std::atomic<int> SigHandlerTrap::SigHandling;
-
-    void waitSigHandlerTrap()
-    {
-        SigHandlerTrap::wait();
-    }
 
     const char *signalName(const int signo)
     {
@@ -403,11 +378,12 @@ void requestShutdown()
         for (size_t i = 0; i < ActivityStrings.size(); ++i)
         {
             size_t idx = (ActivityStringIndex + i) % ActivityStrings.size();
-            if (!ActivityStrings[idx].empty())
+            const char *str = ActivityStrings[idx];
+            if (str && str[0] != '\0')
             {
                 // no plausible impl. will heap allocate in c_str.
                 signalLog("\t");
-                signalLog(ActivityStrings[idx].c_str());
+                signalLog(str);
                 signalLog("\n");
             }
         }
@@ -518,6 +494,41 @@ void requestShutdown()
         assert (sizeof (FatalGdbString) > strlen(streamStr.c_str()) + 1);
         strncpy(FatalGdbString, streamStr.c_str(), sizeof(FatalGdbString)-1);
         FatalGdbString[sizeof(FatalGdbString)-1] = '\0';
+    }
+
+    static
+    void handleSigChild(const int /* signal */, siginfo_t *info, void * /* uctxt */)
+    {
+        SigChildHandle(info ? info->si_pid : -1);
+    }
+
+    void setSigChildHandler(SigChildHandler fn)
+    {
+        struct sigaction action;
+
+        SigChildHandle = fn;
+        sigemptyset(&action.sa_mask);
+
+        if (fn)
+        {
+            action.sa_flags = SA_SIGINFO;
+            action.sa_sigaction = handleSigChild;
+        }
+        else
+        {
+            action.sa_flags = 0;
+            action.sa_handler = SIG_DFL;
+        }
+
+        sigaction(SIGCHLD, &action, nullptr);
+
+    }
+
+    void dieOnParentDeath()
+    {
+#if !defined(ANDROID) && !defined(IOS) && !defined(__FreeBSD__)
+        prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
     }
 
     static

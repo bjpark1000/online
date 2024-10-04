@@ -9,7 +9,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 /*
- * L.Control.RowHeader
  */
 
 /* global _UNO app UNOModifier */
@@ -20,25 +19,25 @@ declare var UNOModifier: any;
 namespace cool {
 
 export class RowHeader extends cool.Header {
+	name: string = L.CSections.RowHeader.name;
+	anchor:Array<Array<string>> = [[L.CSections.CornerHeader.name, 'bottom', 'top'], [L.CSections.RowGroup.name, 'right', 'left']];
+	position: number[] = [0, 0]; // This section's myTopLeft is placed according to corner header and row group sections.
+	size: number[] = [48 * app.dpiScale, 0]; // No initial height is necessary.
+	expand: string[] = ['top', 'bottom']; // Expand vertically.
+	processingOrder: number = L.CSections.RowHeader.processingOrder;
+	drawingOrder: number = L.CSections.RowHeader.drawingOrder;
+	zIndex: number = L.CSections.RowHeader.zIndex;
+	cursor: string = 'row-resize';
 
 	_current: number;
 	_resizeHandleSize: number;
 	_selection: SelectionRange;
 
-	constructor(options?: HeaderExtraProperties) {
-		super({
-			name: L.CSections.RowHeader.name,
-			anchor: [[L.CSections.CornerHeader.name, 'bottom', 'top'], [L.CSections.RowGroup.name, 'right', 'left']],
-			position: [0, 0], // This section's myTopLeft is placed according to corner header and row group sections.
-			size: [48 * app.dpiScale, 0], // No initial height is necessary.
-			expand: 'top bottom', // Expand vertically.
-			processingOrder: L.CSections.RowHeader.processingOrder,
-			drawingOrder: L.CSections.RowHeader.drawingOrder,
-			zIndex: L.CSections.RowHeader.zIndex,
-			interactable: true,
-			sectionProperties: {},
-			cursor: (options == undefined || options.cursor === undefined) ? 'row-resize' : options.cursor,
-		});
+	constructor(cursor?: string) {
+		super();
+
+		if (cursor)
+			this.cursor = cursor;
 	}
 
 	onInitialize(): void {
@@ -54,7 +53,8 @@ export class RowHeader extends cool.Header {
 
 		this._selectionBackgroundGradient = [ '#3465A4', '#729FCF', '#004586' ];
 
-		this._map.on('move zoomchanged sheetgeometrychanged splitposchanged darkmodechanged', this._updateCanvas, this);
+		this._map.on('move zoomchanged sheetgeometrychanged splitposchanged', this._updateCanvas, this);
+		this._map.on('darkmodechanged', this._reInitRowColumnHeaderStylesAfterModeChange, this);
 
 		this._initHeaderEntryStyles('spreadsheet-header-row');
 		this._initHeaderEntryHoverStyles('spreadsheet-header-row-hover');
@@ -89,6 +89,10 @@ export class RowHeader extends cool.Header {
 			'.uno:ShowRow': {
 				name: _UNO('.uno:ShowRow', 'spreadsheet', true),
 				callback: (this._showRow).bind(this)
+			},
+			'.uno:FreezePanes': {
+				name: _UNO('.uno:FreezePanes', 'spreadsheet', true),
+				callback: (this._freezePanes).bind(this)
 			}
 		};
 
@@ -171,15 +175,6 @@ export class RowHeader extends cool.Header {
 		const top = rect.top + rowStart;
 		const bottom = rect.top + rowEnd;
 		return {left: left, right: right, top: top, bottom: bottom};
-	}
-
-	onDraw(): void {
-		this._headerInfo.forEachElement(function(elemData: HeaderEntryData): boolean {
-			this.drawHeaderEntry(elemData);
-			return false; // continue till last.
-		}.bind(this));
-
-		this.drawResizeLineIfNeeded();
 	}
 
 	onClick (point: number[], e: MouseEvent): void {
@@ -295,8 +290,4 @@ export class RowHeader extends cool.Header {
 
 }
 
-L.Control.RowHeader = cool.RowHeader;
-
-L.control.rowHeader = function (options?: cool.HeaderExtraProperties) {
-	return new L.Control.RowHeader(options);
-};
+app.definitions.rowHeader = cool.RowHeader;

@@ -1,61 +1,50 @@
-/* global describe it cy require afterEach beforeEach */
+/* global describe it cy require beforeEach */
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
 var desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop'], 'Row Column Operation', function() {
-	var testFileName = 'row_column_operation.ods';
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'calc');
+		helper.setupAndLoadDocument('calc/row_column_operation.ods');
 		desktopHelper.switchUIToNotebookbar();
-		calcHelper.selectEntireSheet();
-		calcHelper.assertDataClipboardTable(['Hello','Hi','World','Bye']);
+		helper.setDummyClipboardForCopy();
+		calcHelper.assertSheetContents(['Hello','Hi','World','Bye'], true);
 		calcHelper.clickOnFirstCell(true,false);
-		cy.cGet('#toolbar-up .w2ui-scroll-right').click();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		cy.cGet('#toolbar-up .ui-scroll-right').click();
 	});
 
 	it('Insert/Delete row' , function() {
 		//Insert row above
 		cy.cGet('#home-insert-columns-before-button').click();
 
-		calcHelper.selectEntireSheet();
-		//calcHelper.assertDataClipboardTable(['','','Hello','Hi','World','Bye']);
+		//calcHelper.assertSheetContents(['','','Hello','Hi','World','Bye']);
 		//delete row
 		calcHelper.clickOnFirstCell(true, false);
 
 		cy.cGet('#home-delete-rows-button').click();
-		calcHelper.selectEntireSheet();
-		//calcHelper.assertDataClipboardTable(['Hello','Hi','World','Bye']);
+		//calcHelper.assertSheetContents(['Hello','Hi','World','Bye']);
 
 		//insert row below
 		calcHelper.clickOnFirstCell(true, false);
 		cy.cGet('#home-insert-rows-after-button').click();
-		calcHelper.selectEntireSheet();
-		//calcHelper.assertDataClipboardTable(['Hello','Hi','','','World','Bye']);
+		//calcHelper.assertSheetContents(['Hello','Hi','','','World','Bye']);
 	});
 
 	it('Insert/Delete Column', function() {
 		//insert column before
 		cy.cGet('#home-insert-columns-before-button').click();
-		calcHelper.selectEntireSheet();
-		//calcHelper.assertDataClipboardTable(['','Hello','Hi','','World','Bye']);
+		//calcHelper.assertSheetContents(['','Hello','Hi','','World','Bye']);
 		calcHelper.clickOnFirstCell(true, false);
 
 		//delete column
 		cy.cGet('#home-delete-columns-button').click();
-		calcHelper.selectEntireSheet();
 		cy.wait(500);
-		//calcHelper.assertDataClipboardTable(['Hello','Hi','World','Bye']);
+		//calcHelper.assertSheetContents(['Hello','Hi','World','Bye']);
 		calcHelper.clickOnFirstCell(true,false);
 
 		//insert column after
 		cy.cGet('#home-insert-columns-after-button').click();
-		calcHelper.selectEntireSheet();
-		//calcHelper.assertDataClipboardTable(['Hello','','Hi','World','','Bye']);
+		//calcHelper.assertSheetContents(['Hello','','Hi','World','','Bye']);
 	});
 });

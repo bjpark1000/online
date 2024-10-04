@@ -9,13 +9,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <chrono>
 #include <config.h>
 
 #include "WebSocketSession.hpp"
-
-#include <algorithm>
-#include <vector>
 
 #include <Poco/Net/AcceptCertificateHandler.h>
 #include <Poco/Net/HTTPRequest.h>
@@ -30,9 +26,11 @@
 #include <Common.hpp>
 #include <Protocol.hpp>
 
-#include "lokassert.hpp"
-#include <countcoolkits.hpp>
+#include <lokassert.hpp>
 #include <helpers.hpp>
+#include <KitPidHelpers.hpp>
+
+#include <chrono>
 
 using namespace helpers;
 
@@ -47,8 +45,7 @@ class HTTPWSTest : public CPPUNIT_NS::TestFixture
 
     CPPUNIT_TEST(testExoticLang);
     CPPUNIT_TEST(testSaveOnDisconnect);
-    // This test is failing
-    //CPPUNIT_TEST(testReloadWhileDisconnecting);
+    CPPUNIT_TEST(testReloadWhileDisconnecting);
     CPPUNIT_TEST(testInactiveClient);
     CPPUNIT_TEST(testViewInfoMsg);
     CPPUNIT_TEST(testUndoConflict);
@@ -73,7 +70,7 @@ public:
         Poco::SharedPtr<Poco::Net::InvalidCertificateHandler> invalidCertHandler = new Poco::Net::AcceptCertificateHandler(false);
         Poco::Net::Context::Params sslParams;
         Poco::Net::Context::Ptr sslContext = new Poco::Net::Context(Poco::Net::Context::CLIENT_USE, sslParams);
-        Poco::Net::SSLManager::instance().initializeClient(nullptr, invalidCertHandler, sslContext);
+        Poco::Net::SSLManager::instance().initializeClient(nullptr, std::move(invalidCertHandler), std::move(sslContext));
 #endif
     }
 
@@ -87,7 +84,7 @@ public:
     void setUp()
     {
         resetTestStartTime();
-        testCountHowManyCoolkits();
+        waitForKitPidsReady("setUp");
         resetTestStartTime();
         _socketPoll->startThread();
     }
@@ -96,14 +93,14 @@ public:
     {
         _socketPoll->joinThread();
         resetTestStartTime();
-        testNoExtraCoolKitsLeft();
+        waitForKitPidsReady("tearDown");
         resetTestStartTime();
     }
 };
 
 void HTTPWSTest::testExoticLang()
 {
-    const std::string testname = "saveOnDisconnect- ";
+    const std::string testname = "testExoticLang- ";
 
     std::string documentPath, documentURL;
     getDocumentPathAndURL("hello.odt", documentPath, documentURL, testname);
@@ -126,6 +123,7 @@ void HTTPWSTest::testExoticLang()
 
 void HTTPWSTest::testSaveOnDisconnect()
 {
+
     const std::string testname = "saveOnDisconnect- ";
 
     const std::string text = helpers::genRandomString(40);
@@ -134,7 +132,6 @@ void HTTPWSTest::testSaveOnDisconnect()
     std::string documentPath, documentURL;
     getDocumentPathAndURL("hello.odt", documentPath, documentURL, testname);
 
-    int kitcount = -1;
     try
     {
         std::shared_ptr<http::WebSocketSession> socket1
@@ -148,8 +145,6 @@ void HTTPWSTest::testSaveOnDisconnect()
         sendTextFrame(socket1, "paste mimetype=text/plain;charset=utf-8\n" + text, testname);
         getResponseMessage(socket1, "pasteresult: success", testname);
 
-        kitcount = getCoolKitProcessCount();
-
         // Shutdown abruptly.
         TST_LOG("Closing connection after pasting.");
 
@@ -160,23 +155,14 @@ void HTTPWSTest::testSaveOnDisconnect()
                            socket1->waitForDisconnection(std::chrono::seconds(5)));
         LOK_ASSERT_MESSAGE("Expected successful disconnection of the WebSocket 2",
                            socket2->waitForDisconnection(std::chrono::seconds(5)));
-    }
-    catch (const Poco::Exception& exc)
-    {
-        LOK_ASSERT_FAIL(exc.displayText());
-    }
 
-    // Allow time to save and destroy before we connect again.
-    testNoExtraCoolKitsLeft();
-    TST_LOG("Loading again.");
-    try
-    {
+        // Allow time to save and destroy before we connect again.
+        waitForKitPidsReady(testname);
+
+        TST_LOG("Loading again.");
         // Load the same document and check that the last changes (pasted text) is saved.
         std::shared_ptr<http::WebSocketSession> socket
             = loadDocAndGetSession(_socketPoll, _uri, documentURL, testname + "3 ");
-
-        // Should have no new instances.
-        LOK_ASSERT_EQUAL(kitcount, countCoolKitProcesses(kitcount));
 
         // Check if the document contains the pasted text.
         const std::string selection = getAllText(socket, testname, text);
@@ -212,26 +198,25 @@ void HTTPWSTest::testReloadWhileDisconnecting()
         // the socket is closed, when the doc is not even modified yet.
         getResponseMessage(socket, "statechanged", testname);
 
-        const int kitcount = getCoolKitProcessCount();
-
         // Shutdown abruptly.
         TST_LOG("Closing connection after pasting.");
         socket->asyncShutdown();
         LOK_ASSERT_MESSAGE("Expected successful disconnection of the WebSocket",
                            socket->waitForDisconnection(std::chrono::seconds(5)));
 
+        // Do not wait here. Reconnect before disconnect finishes
+        // TODO: Test fails because it is unable to reconnect
+
         // Load the same document and check that the last changes (pasted text) is saved.
         TST_LOG("Loading again.");
         socket = loadDocAndGetSession(_socketPoll, _uri, documentURL, testname);
 
-        // Should have no new instances.
-        LOK_ASSERT_EQUAL(kitcount, countCoolKitProcesses(kitcount));
-
-        // Check if the document contains the pasted text.
+        TST_LOG("Checking if the document contains the pasted text.");
         const std::string expected = "aaa bbb ccc";
         const std::string selection = getAllText(socket, testname, expected);
         LOK_ASSERT_EQUAL(std::string("textselectioncontent: ") + expected, selection);
 
+        TST_LOG("Closing connection after getting pasted text.");
         socket->asyncShutdown();
 
         LOK_ASSERT_MESSAGE("Expected successful disconnection of the WebSocket",
@@ -292,10 +277,15 @@ void HTTPWSTest::testInactiveClient()
                                             token == "editor:" ||
                                             token == "context:" ||
                                             token == "window:" ||
-                                            token == "rulerupdate:" ||
+                                            token == "hrulerupdate:" ||
+                                            token == "vrulerupdate:" ||
                                             token == "tableselected:" ||
                                             token == "colorpalettes:" ||
-                                            token == "jsdialog:");
+                                            token == "jsdialog:" ||
+                                            token == "serveraudit:" ||
+                                            token == "loaded:" ||
+                                            token == "unloaded:" ||
+                                            token == "adminuser:");
 
                     // End when we get state changed.
                     return (token != "statechanged:");

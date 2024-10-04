@@ -11,13 +11,6 @@ on:
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [master]
-    # The paths-ignore here only defines that changes in these will not trigger
-    # the action at all; but to actually avoid scanning the content of these,
-    # see the .github/codeql/codeql-config.yml configuration file
-    paths-ignore:
-      - '**/*w2ui-1.5.rc1.js'
-      - 'loleaflet'
-
   schedule:
     - cron: '0 22 * * 3'
 
@@ -45,7 +38,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v1
+      uses: github/codeql-action/init@v2
       with:
         languages: ${{ matrix.language }}
         config-file: ./.github/codeql/codeql-config.yml
@@ -76,15 +69,15 @@ jobs:
     - if: matrix.language == 'cpp'
       name: Configure
       run: |
-        cd .. && wget https://github.com/CollaboraOnline/online/releases/download/for-code-assets/core-co-23.05-assets.tar.gz
-        tar xvf core-co-23.05-assets.tar.gz && rm core-co-23.05-assets.tar.gz && export LOCOREPATH=$(pwd)
+        cd .. && wget https://github.com/CollaboraOnline/online/releases/download/for-code-assets/core-co-24.04-assets.tar.gz
+        tar xvf core-co-24.04-assets.tar.gz && rm core-co-24.04-assets.tar.gz && export LOCOREPATH=$(pwd)
         cd online && ./autogen.sh
-        ./configure --enable-silent-rules --with-lokit-path=${LOCOREPATH}/include --with-lo-path=${LOCOREPATH}/instdir --enable-debug --disable-setcap
+        ./configure --enable-silent-rules --with-lokit-path=${LOCOREPATH}/include --with-lo-path=${LOCOREPATH}/instdir --enable-debug
         cd browser && npm update
 
     - if: matrix.language == 'cpp'
       name: Build
-      run: make -j `nproc`
+      run: make -j `nproc` build-nocheck
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v1
+      uses: github/codeql-action/analyze@v2

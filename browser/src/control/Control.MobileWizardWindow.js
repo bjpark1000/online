@@ -13,7 +13,7 @@
  * L.Control.MobileWizardWindow - contains one unique window instance inside mobile-wizard
  */
 
-/* global app $ w2ui */
+/* global app $ */
 L.Control.MobileWizardWindow = L.Control.extend({
 	options: {
 		maxHeight: '45vh',
@@ -55,6 +55,8 @@ L.Control.MobileWizardWindow = L.Control.extend({
 		var parentNode = document.getElementById('mobile-wizard-content');
 		this.content = L.DomUtil.create('div', 'mobile-wizard mobile-wizard-content', parentNode);
 		this.content.id = this.id;
+
+		this.scrollPositions = [];
 	},
 
 	onAdd: function (map) {
@@ -64,7 +66,7 @@ L.Control.MobileWizardWindow = L.Control.extend({
 		if (!window.mode.isMobile())
 			return;
 
-		this.content.innerHTML = '';
+		this.content.replaceChildren();
 		this._setupBackButton();
 	},
 
@@ -96,7 +98,7 @@ L.Control.MobileWizardWindow = L.Control.extend({
 		if (this.isSnackBar)
 			this.mobileWizard.addClass('snackbar');
 		if (this.isBusyPopUp)
-			this.mobileWizard.addClass('busypopup'); 
+			this.mobileWizard.addClass('busypopup');
 	},
 
 	/// resets all classes which can modify the look to the original values
@@ -106,7 +108,7 @@ L.Control.MobileWizardWindow = L.Control.extend({
 		this.tabsContainer.hide();
 		this.titleBar.css('top', '0px');
 		this.titleBar.show();
-		this.titleNode.innerHTML = '';
+		this.titleNode[0].replaceChildren();
 		this._removeSpecialClasses();
 	},
 
@@ -115,7 +117,7 @@ L.Control.MobileWizardWindow = L.Control.extend({
 		this._softReset();
 		this._currentDepth = 0;
 		this._inMainMenu = true;
-		this.content.innerHTML = '';
+		this.content.replaceChildren();
 		this._isTabMode = false;
 		this._currentPath = [];
 		this.tabs = null;
@@ -146,14 +148,27 @@ L.Control.MobileWizardWindow = L.Control.extend({
 		this._applySpecialClasses();
 	},
 
+	_createScrollIndicator() {
+		const container = document.createElement('div');
+		container.className = 'mobile-wizard-scroll-indicator';
+		container.id = 'mobile-wizard-scroll-indicator-' + this.id;
+		container.style.width = '100%';
+		container.style.height = '0px';
+		container.style.position = 'fixed';
+		container.style.zIndex = 2;
+		container.style.bottom = '-7px';
+		container.style.boxShadow = '0 -8px 20px 4px #0b87e770, 0 1px 10px 6px #0b87e7';
+		return container;
+	},
+
 	_showWizard: function() {
 		if (this.snackBarTimout)
 			clearTimeout(this.snackBarTimout);
 
 		this.isVisible = true;
 
-		this.scrollIndicator = $('<div class="mobile-wizard-scroll-indicator" id="mobile-wizard-scroll-indicator-' + this.id + '" style="width: 100%;height: 0px;position: fixed;z-index: 2;bottom: -7px;box-shadow: 0 -8px 20px 4px #0b87e770, 0 1px 10px 6px #0b87e7;"></div>');
-		$(this.content).append(this.scrollIndicator);
+		this.scrollIndicator = this._createScrollIndicator();
+		this.content.appendChild(this.scrollIndicator);
 
 		var wizard = $('#mobile-wizard');
 		wizard.show();
@@ -163,8 +178,8 @@ L.Control.MobileWizardWindow = L.Control.extend({
 			var height = wizard.prop('scrollHeight');
 			var contentHeight = wizard.prop('clientHeight');
 			var scrollLeft = height - mWizardContentScroll;
-			if (scrollLeft < contentHeight + 1 || !that.isVisible) { that.scrollIndicator.css('display','none'); }
-			else { that.scrollIndicator.css('display','block'); }
+			if (scrollLeft < contentHeight + 1 || !that.isVisible) { that.scrollIndicator.style.display = 'none'; }
+			else { that.scrollIndicator.style.display = 'block'; }
 		});
 		$('#toolbar-down').hide();
 		if (window.ThisIsTheAndroidApp)
@@ -172,9 +187,8 @@ L.Control.MobileWizardWindow = L.Control.extend({
 		if (window.mobileMenuWizard)
 			this.map.showSidebar = false;
 
-		var stb = document.getElementById('spreadsheet-toolbar');
-		if (stb)
-			stb.style.display = 'none';
+		if (this.map.uiManager.sheetsBar)
+			this.map.uiManager.sheetsBar.hide();
 
 		if (!document.getElementById('document-container').classList.contains('landscape')) {
 			var pcw = document.getElementById('presentation-controls-wrapper');
@@ -228,12 +242,12 @@ L.Control.MobileWizardWindow = L.Control.extend({
 
 		$('#mobile-wizard .ui-effects-placeholder').hide();
 
-		var nodesToHide = $(contentToShow).siblings().not('.mobile-wizard-scroll-indicator');
+		// do not select already hidden nodes at first place
+		var nodesToHide = $(contentToShow).siblings(':visible').not('.mobile-wizard-scroll-indicator');
 
 		var parent = $(contentToShow).parent();
 		if (parent.hasClass('toolbox'))
-			nodesToHide = nodesToHide.add(parent.siblings().not('.mobile-wizard-scroll-indicator'));
-
+			nodesToHide = nodesToHide.add(parent.siblings(':visible:not(.mobile-wizard-scroll-indicator)'));
 		var duration = 10;
 		if (animate) {
 			nodesToHide.hide('slide', { direction: 'left' }, duration);
@@ -253,6 +267,10 @@ L.Control.MobileWizardWindow = L.Control.extend({
 			$(contentToShow).children('.ui-content').first().show('slide', { direction: 'right' }, 'fast');
 		else
 			$(contentToShow).children('.ui-content').first().show();
+
+		const currentScroll = this.mobileWizard.scrollTop();
+		this.scrollPositions.push(currentScroll);
+		this.mobileWizard.scrollTop(0);
 
 		this._currentDepth++;
 		if (!this._inBuilding)
@@ -278,13 +296,13 @@ L.Control.MobileWizardWindow = L.Control.extend({
 			this.parent.removeWindow(this);
 			this._currentDepth = 0;
 			if (window.mobileWizard === true) {
-				w2ui['actionbar'].click('mobile_wizard');
+				app.dispatcher.dispatch('mobile_wizard');
 			} else if (window.insertionMobileWizard === true) {
-				w2ui['actionbar'].click('insertion_mobile_wizard');
+				app.dispatcher.dispatch('insertion_mobile_wizard');
 			} else if (window.mobileMenuWizard === true) {
 				$('#main-menu-state').click();
 			} else if (window.commentWizard === true) {
-				w2ui['actionbar'].click('comment_wizard');
+				app.dispatcher.dispatch('comment_wizard');
 			} else if (window.contextMenuWizard) {
 				window.contextMenuWizard = false;
 				this.map.fire('closemobilewizard');
@@ -299,13 +317,23 @@ L.Control.MobileWizardWindow = L.Control.extend({
 				this._customTitle ? this._setCustomTitle(this._customTitle) : this._setTitle(this._mainTitle);
 
 			var currentNode = $('.ui-explorable-entry.level-' + this._currentDepth + '.mobile-wizard:visible');
-			var headers = currentNode.siblings();
+			// select only those nodes which are updated on Level down
+			var headers = currentNode.siblings().filter(function() {
+				var styleAttributeValue = $(this).attr('style');
+				return styleAttributeValue && styleAttributeValue.includes('display: none;');
+			});
 			var currentHeader = currentNode.children('.ui-header');
 			headers = headers.add(currentHeader);
 
 			var parent = currentNode.parent();
 			if (parent.hasClass('toolbox'))
-				headers = headers.add(parent.siblings());
+				parent.siblings().each(function() {
+					var styleAttributeValue = $(this).attr('style');
+					// select only those nodes which are updated on Level down
+					if (styleAttributeValue && styleAttributeValue.includes('display: none;')) {
+						headers = headers.add($(this));
+					}
+				});
 
 			headers = headers.not('.hidden');
 
@@ -313,6 +341,9 @@ L.Control.MobileWizardWindow = L.Control.extend({
 			$('#mobile-wizard.funcwizard div#mobile-wizard-content').removeClass('showHelpBG');
 			$('#mobile-wizard.funcwizard div#mobile-wizard-content').addClass('hideHelpBG');
 			headers.show('slide', { direction: 'left' }, 'fast');
+
+			const prevScroll = this.scrollPositions.pop();
+			this.mobileWizard.scrollTop(prevScroll);
 
 			if (this._currentDepth == 0 || (this._isTabMode && this._currentDepth == 1)) {
 				this._inMainMenu = true;
@@ -508,6 +539,7 @@ L.Control.MobileWizardWindow = L.Control.extend({
 			if (!alreadyOpen) {
 				history.pushState({context: 'mobile-wizard'}, 'mobile-wizard-opened');
 				history.pushState({context: 'mobile-wizard', level: 0}, 'mobile-wizard-level-0');
+				this.mobileWizard.scrollTop(0);
 			}
 
 			if (!this._builder) {

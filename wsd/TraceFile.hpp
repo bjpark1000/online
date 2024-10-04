@@ -28,6 +28,7 @@
 #include "Util.hpp"
 #include "StringVector.hpp"
 #include "FileUtil.hpp"
+#include <common/Uri.hpp>
 
 /// Dumps commands and notification trace.
 class TraceFileRecord
@@ -50,10 +51,17 @@ public:
 
     std::string toString() const
     {
-        std::ostringstream oss;
-        oss << static_cast<char>(_dir) << _pid << static_cast<char>(_dir)
-            << _sessionId << static_cast<char>(_dir) << _payload;
-        return oss.str();
+        if (_dir == Direction::Invalid)
+        {
+            return "Invalid TraceFileRecord";
+        }
+        else
+        {
+            std::ostringstream oss;
+            oss << static_cast<char>(_dir) << _pid << static_cast<char>(_dir)
+                << _sessionId << static_cast<char>(_dir) << _payload;
+            return oss.str();
+        }
     }
 
     void setDir(Direction dir) { _dir = dir; }
@@ -127,9 +135,7 @@ public:
 
         if (_takeSnapshot)
         {
-            std::string decodedUri;
-            Poco::URI::decode(uri, decodedUri);
-            const std::string url = Poco::URI(decodedUri).getPath();
+            const std::string url = Poco::URI(Uri::decode(uri)).getPath();
             const auto it = _urlToSnapshot.find(url);
             if (it != _urlToSnapshot.end())
             {
@@ -208,9 +214,7 @@ public:
                     std::string url;
                     if (COOLProtocol::getTokenString(tokens[1], "url", url))
                     {
-                        std::string decodedUrl;
-                        Poco::URI::decode(url, decodedUrl);
-                        Poco::URI uriPublic = Poco::URI(decodedUrl);
+                        Poco::URI uriPublic = Poco::URI(Uri::decode(url));
                         if (uriPublic.isRelative() || uriPublic.getScheme() == "file")
                         {
                             uriPublic.normalize();

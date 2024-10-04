@@ -52,16 +52,20 @@ function _multiLineEditControl(parentContainer, data, builder, callback) {
 
 	edit.id = data.id;
 
-	if (data.enabled === 'false' || data.enabled === false)
+	if (data.enabled === false) {
 		edit.disabled = true;
+	}
 
-	edit.addEventListener('keyup', function() {
+	function _keyupChangeHandler() {
 		if (callback)
 			callback(this.value);
 
 		builder.callback('edit', 'change', edit, this.value, builder);
 		setTimeout(function () { _sendSimpleSelection(edit, builder); }, 0);
-	});
+	}
+
+	edit.addEventListener('keyup', _keyupChangeHandler);
+	edit.addEventListener('change', _keyupChangeHandler); // required despite keyup as, e.g., iOS paste does not trigger keyup
 
 	edit.addEventListener('mouseup', function (event) {
 		if (edit.disabled) {

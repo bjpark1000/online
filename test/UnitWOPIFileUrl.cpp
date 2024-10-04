@@ -42,14 +42,7 @@ class UnitWOPIFileUrl : public WopiTestServer
     /// then save. Validations are done during
     /// GetFile and PutFile to check that FileUrl
     /// is used, or not, as expected.
-    enum class Phase
-    {
-        Load,
-        WaitLoadStatus,
-        WaitModifiedStatus,
-        WaitPutFile,
-        Polling
-    } _phase;
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitModifiedStatus, WaitPutFile, Polling) _phase;
 
     /// We have three tests, one for each
     /// of the following cases of FileUrl:
@@ -157,8 +150,7 @@ public:
         {
             LOG_TST("FakeWOPIHost: Handling PutFile: " << uriReq.getPath());
 
-            LOK_ASSERT_MESSAGE("Expected to be in Phase::WaitPutFile",
-                               _phase == Phase::WaitPutFile);
+            LOK_ASSERT_STATE(_phase, Phase::WaitPutFile);
 
             LOK_ASSERT_MESSAGE("Always the default URI must be used for PutFile",
                                regContent.match(uriReq.getPath()));
@@ -180,18 +172,18 @@ public:
             {
                 LOG_TST("Valid FileUrl test successful. Now testing Invalid FileUrl.");
                 _fileUrlState = FileUrlState::Invalid;
-                _phase = Phase::Load;
+                TRANSITION_STATE(_phase, Phase::Load);
             }
             else if (_fileUrlState == FileUrlState::Invalid)
             {
                 LOG_TST("Invalid FileUrl test successful. Now testing without FileUrl.");
                 _fileUrlState = FileUrlState::Absent;
-                _phase = Phase::Load;
+                TRANSITION_STATE(_phase, Phase::Load);
             }
             else if (_fileUrlState == FileUrlState::Absent)
             {
                 LOG_TST("Testing of FileUrl completed successfully.");
-                _phase = Phase::Polling;
+                TRANSITION_STATE(_phase, Phase::Polling);
                 exitTest(TestResult::Ok);
             }
 
@@ -204,12 +196,11 @@ public:
     bool onDocumentLoaded(const std::string& message) override
     {
         LOG_TST("onDocumentLoaded: [" << message << ']');
-        LOK_ASSERT_MESSAGE("Expected to be in Phase::WaitLoadStatus",
-                           _phase == Phase::WaitLoadStatus);
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
 
         LOG_TST(
             "onDocumentLoaded: Modifying the document and switching to Phase::WaitModifiedStatus");
-        _phase = Phase::WaitModifiedStatus;
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
 
         WSD_CMD("key type=input char=97 key=0");
         WSD_CMD("key type=up char=0 key=512");
@@ -220,11 +211,10 @@ public:
     bool onDocumentModified(const std::string& message) override
     {
         LOG_TST("onDocumentModified: [" << message << ']');
-        LOK_ASSERT_MESSAGE("Expected to be in Phase::WaitModified",
-                           _phase == Phase::WaitModifiedStatus);
+        LOK_ASSERT_STATE(_phase, Phase::WaitModifiedStatus);
 
         LOG_TST("onDocumentModified: Saving document and switching to Phase::WaitPutFile");
-        _phase = Phase::WaitPutFile;
+        TRANSITION_STATE(_phase, Phase::WaitPutFile);
 
         WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0 "
                 "extendedData=CustomFlag%3DCustom%20Value%3BAnotherFlag%3DAnotherValue");
@@ -239,7 +229,7 @@ public:
             case Phase::Load:
             {
                 LOG_TST("Phase::Load");
-                _phase = Phase::WaitLoadStatus;
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
 
                 initWebsocket("/wopi/files/" + std::to_string(_docId) + "?access_token=anything");
 

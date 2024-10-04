@@ -60,12 +60,12 @@ export class SplitPanesContext {
 	}
 
 	public getMaxSplitPosX(): number {
-		const rawMax = Math.floor(app.dpiScale * this._map.getSize().x * this.options.maxHorizontalSplitPercent / 100);
+		const rawMax = Math.floor(app.canvasSize.pX * this.options.maxHorizontalSplitPercent / 100);
 		return this._docLayer.getSnapDocPosX(rawMax);
 	}
 
 	public getMaxSplitPosY(): number {
-		const rawMax = Math.floor(app.dpiScale * this._map.getSize().y * this.options.maxVerticalSplitPercent / 100);
+		const rawMax = Math.floor(app.canvasSize.pY * this.options.maxVerticalSplitPercent / 100);
 		return this._docLayer.getSnapDocPosY(rawMax);
 	}
 
@@ -113,6 +113,7 @@ export class SplitPanesContext {
 			changed = true;
 		}
 
+		app.calc.splitCoordinate.pX = newX;
 		this._updateXSplitter();
 
 		if (!noFire)
@@ -139,6 +140,7 @@ export class SplitPanesContext {
 			changed = true;
 		}
 
+		app.calc.splitCoordinate.pY = newY;
 		this._updateYSplitter();
 
 		if (!noFire)
@@ -193,6 +195,69 @@ export class SplitPanesContext {
 		});
 
 		return paneStatusList;
+	}
+
+	// When view is split by horizontal and/or vertical line(s), there are up to 4 different parts of the file visible on the screen.
+	// This function returns the viewed parts' coordinates as simple rectangles.
+	public getViewRectangles(): cool.SimpleRectangle[] {
+		const viewRectangles: cool.SimpleRectangle[] = new Array<cool.SimpleRectangle>();
+		viewRectangles.push(app.file.viewedRectangle.clone()); // If view is not splitted, this will be the only view rectangle.
+
+		/*
+			|----------------------------|
+			| initial [0]  |  topright   |
+			|              |             |
+			|--------------|-------------|
+			| bottomleft   |  bottomright|
+			|              |             |
+			|----------------------------|
+
+		*/
+
+		if (this._splitPos.x) { // Vertical split.
+			// There is vertical split, narrow down the initial view.
+			viewRectangles[0].pX1 = 0;
+			viewRectangles[0].pX2 = this._splitPos.x;
+
+			const topRightPane: cool.SimpleRectangle = app.file.viewedRectangle.clone();
+			const width = app.file.viewedRectangle.pWidth - viewRectangles[0].pWidth;
+			topRightPane.pX1 = app.file.viewedRectangle.pX2 - width;
+			topRightPane.pWidth = width;
+			viewRectangles.push(topRightPane);
+		}
+
+		if (this._splitPos.y) {
+			// There is a horizontal split, narrow down the initial view.
+			viewRectangles[0].pY1 = 0;
+			viewRectangles[0].pY2 = this._splitPos.y;
+
+			const bottomLeftPane = app.file.viewedRectangle.clone();
+			const height = app.file.viewedRectangle.pHeight - viewRectangles[0].pHeight;
+			bottomLeftPane.pY1 = app.file.viewedRectangle.pY2 - height;
+			bottomLeftPane.pHeight = height;
+			viewRectangles.push(bottomLeftPane);
+		}
+
+		// If both splitters are active, don't let them overlap and add the bottom right pane.
+		if (this._splitPos.x && this._splitPos.y) {
+			viewRectangles[1].pY1 = 0;
+			viewRectangles[1].pY2 = this._splitPos.y;
+
+			viewRectangles[2].pX1 = 0;
+			viewRectangles[2].pX2 = this._splitPos.x;
+
+			const bottomRightPane = app.file.viewedRectangle.clone();
+			const width = app.file.viewedRectangle.pWidth - viewRectangles[0].pWidth;
+			const height = app.file.viewedRectangle.pHeight - viewRectangles[0].pHeight;
+			bottomRightPane.pX1 = app.file.viewedRectangle.pX2 - width;
+			bottomRightPane.pWidth = width;
+			bottomRightPane.pY1 = app.file.viewedRectangle.pY2 - height;
+			bottomRightPane.pHeight = height;
+
+			viewRectangles.push(bottomRightPane);
+		}
+
+		return viewRectangles;
 	}
 
 	// returns all the pane rectangles for the provided full-map area (all in core pixels).

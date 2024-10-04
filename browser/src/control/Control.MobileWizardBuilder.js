@@ -37,6 +37,7 @@ L.Control.MobileWizardBuilder = L.Control.JSDialogBuilder.extend({
 		this._controlHandlers['paneltabs'] = JSDialog.mobilePanelControl;
 		this._controlHandlers['radiobutton'] = this._radiobuttonControl;
 		this._controlHandlers['scrollwindow'] = undefined;
+		this._controlHandlers['submenutabs'] = JSDialog.mobileSubmenuTabControl;
 		this._controlHandlers['tabcontrol'] = JSDialog.mobileTabControl;
 		this._controlHandlers['borderstyle'] = JSDialog.mobileBorderSelector;
 
@@ -48,6 +49,7 @@ L.Control.MobileWizardBuilder = L.Control.JSDialogBuilder.extend({
 		this._toolitemHandlers['.uno:StyleUpdateByExampleimg'] = function () { return false; };
 		this._toolitemHandlers['.uno:StyleNewByExampleimg'] = function () { return false; };
 		this._toolitemHandlers['.uno:LineEndStyle'] = function () { return false; };
+		this._toolitemHandlers['.uno:SetOutline'] = function () { return false; };
 
 		this._toolitemHandlers['.uno:FontworkShapeType'] = this._fontworkShapeControl;
 		this._toolitemHandlers['SelectWidth'] = this._lineWidthControl;
@@ -64,13 +66,11 @@ L.Control.MobileWizardBuilder = L.Control.JSDialogBuilder.extend({
 		var div = L.DomUtil.create('div', 'spinfieldcontainer', parentContainer);
 		div.id = data.id;
 		controls['container'] = div;
-
-		var commandName = data.id ? data.id.substring('.uno:'.length) : data.id;
+		var commandName = data.id  && data.id.startsWith('.uno:') ? data.id.substring('.uno:'.length) : data.id;
 		if (commandName && commandName.length && L.LOUtil.existsIconForCommand(commandName, builder.map.getDocType())) {
 			var image = L.DomUtil.create('img', 'spinfieldimage', div);
 			var icon = (data.id === 'Transparency') ? builder._createIconURL('settransparency') : builder._createIconURL(data.id);
 			L.LOUtil.setImage(image, icon, builder.map);
-			image.src = icon;
 			icon.alt = '';
 		}
 
@@ -268,15 +268,15 @@ L.Control.MobileWizardBuilder = L.Control.JSDialogBuilder.extend({
 		L.DomUtil.addClass(container, 'radiobutton');
 		L.DomUtil.addClass(container, builder.options.cssClass);
 
+		var radiobuttonLabel = L.DomUtil.create('label', '', container);
+		radiobuttonLabel.textContent = builder._cleanText(data.text);
+		radiobuttonLabel.htmlFor = data.id;
+
 		var radiobutton = L.DomUtil.create('input', '', container);
 		radiobutton.type = 'radio';
 
 		if (data.group)
 			radiobutton.name = data.group;
-
-		var radiobuttonLabel = L.DomUtil.create('label', '', container);
-		radiobuttonLabel.textContent = builder._cleanText(data.text);
-		radiobuttonLabel.htmlFor = data.id;
 
 		if (data.enabled === 'false' || data.enabled === false)
 			$(radiobutton).attr('disabled', 'disabled');
@@ -295,9 +295,12 @@ L.Control.MobileWizardBuilder = L.Control.JSDialogBuilder.extend({
 	},
 
 	_editControl: function(parentContainer, data, builder, callback) {
-		var edit = L.DomUtil.create('input', 'ui-edit ' + builder.options.cssClass, parentContainer);
+		var container = L.DomUtil.create('div', 'ui-edit-container ' + builder.options.cssClass, parentContainer);
+		container.id = data.id;
+
+		var edit = L.DomUtil.create('input', 'ui-edit ' + builder.options.cssClass, container);
 		edit.value = builder._cleanText(data.text);
-		edit.id = data.id;
+		edit.id = data.id + '-input';
 		edit.dir = 'auto';
 		if (data.password)
 			edit.type = 'password';
@@ -311,7 +314,7 @@ L.Control.MobileWizardBuilder = L.Control.JSDialogBuilder.extend({
 			if (callback)
 				callback(this.value);
 			else
-				builder.callback('edit', 'change', edit, this.value, builder);
+				builder.callback('edit', 'change', container, this.value, builder);
 		});
 
 		edit.addEventListener('click', function(e) {
@@ -779,6 +782,11 @@ L.Control.MobileWizardBuilder = L.Control.JSDialogBuilder.extend({
 			} else if (childData.children && this._countVisiblePanels(childData.children) == 2) {
 				handler = this._controlHandlers['paneltabs'];
 				processChildren = handler(childObject, childData.children, this);
+			} else if (childType == 'tabcontrol' && childData.children.length > 3) {
+				handler = this._controlHandlers['submenutabs'];
+				handler(childObject, childData, this);
+				this.postProcess(childObject, childData);
+				this.build(childObject, childData.children);
 			} else {
 				if (handler) {
 					if (this.requiresOverwriting(this, childData))

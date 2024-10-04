@@ -103,7 +103,7 @@ var AdminClusterOverview = AdminSocketBase.extend({
         var cpuSubTitle = document.createElement('p');
         cpuSubTitle.className = 'tile is-fullwidth subtitle';
         cpuSubTitle.textContent = _('CPU History');
-        cpuSubTitle.setAttribute('style', 'margin-bottom: 0rem !important');
+        cpuSubTitle.style.marginBottom = '0rem !important';
 
         mainTile.appendChild(cpuSubTitle);
 
@@ -114,7 +114,8 @@ var AdminClusterOverview = AdminSocketBase.extend({
         var memorySubTitle = document.createElement('p');
         memorySubTitle.className = 'tile is-fullwidth subtitle';
         memorySubTitle.textContent = _('Memory History');
-        memorySubTitle.setAttribute('style', 'margin-bottom: 0rem !important; margin-top:1.5rem');
+        memorySubTitle.style.marginBottom = '0rem !important';
+        memorySubTitle.style.marginTop = '1.5rem';
 
         mainTile.appendChild(memorySubTitle);
 
@@ -524,7 +525,7 @@ var AdminClusterOverview = AdminSocketBase.extend({
             }
             var serverId = tokens[0];
             var cardId = 'card-' + serverId;
-            var card = document.getElementById(cardId);
+            var card = document.getElementById(cardId).parentElement;
             if (card) {
                 card.remove();
             }
@@ -532,7 +533,6 @@ var AdminClusterOverview = AdminSocketBase.extend({
             if (anchor) {
                 anchor.remove();
             }
-            location.reload();
         } else if (textMsg.startsWith('scaling')) {
             var msg = textMsg.split(' ')[1];
             if (msg == 'true') {
@@ -550,8 +550,8 @@ var AdminClusterOverview = AdminSocketBase.extend({
                 msg = _('Failed to set jwt authentication cookie over insecure connection');
             }
             else {
-                msg = _('Failed to authenticate this session over protocol %0');
-                msg = msg.replace('%0', window.location.protocol);
+                msg = _('Failed to authenticate this session over protocol {0}');
+                msg = msg.replace('{0}', window.location.protocol);
             }
 
             var dialog = (new DlgYesNo())

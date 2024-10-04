@@ -10,6 +10,8 @@
 .yavide_proj
 .yavide_session
 .vscode
+Doxyfile.cpp.cfg
+doc/cpp/**
 **/.clangd
 **/.cache
 Makefile
@@ -53,8 +55,14 @@ test/data/hello-world.odt
 test/data/hello-world.ods
 test/data/hello-world.odp
 test/data/hello-world.odg
+test/samples/calc-edit.fods
+test/samples/writer-edit.fodt
+test/samples/impress-edit.fodp
+test/samples/draw-edit.odg
+test/samples/calc-edit.ods
 test/fakesockettest
 test/unithttplib
+test/*.csv
 jsstress
 
 *.o
@@ -82,11 +90,15 @@ browser/dist
 browser/compilets
 browser/typescript_js
 
+coolforkit
+coolforkitns
+coolforkit-caps
+coolforkit-nocaps
+coolforkit-ns
 connect
 lokitclient
 coolwsd
 loolwsd
-coolforkit
 coolmount
 coolmap
 coolconvert
@@ -94,12 +106,12 @@ coolsocketdump
 coolstress
 coolconfig
 loolconfig
-coolforkit-nocaps
 loadtest
 unittest
 clientnb
 libsimd.a
 coolwsd-inproc
+coolbench
 
 # Fuzzer
 *_fuzzer
@@ -133,8 +145,9 @@ zstdlib-symlink
 ICU.dat
 ios/Mobile/Assets.xcassets/AppIcon.appiconset
 
-# iOS app build number
+# build numbers/versions
 BUNDLE-VERSION
+/dist_git_hash
 
 # android stuff
 /android/lib/src/main/assets/dist
@@ -166,3 +179,6 @@ Makecache
 
 # autoconf stuff
 autogen.input
+
+# MacOS file manager metadata
+.DS_Store

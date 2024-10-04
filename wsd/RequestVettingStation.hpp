@@ -9,56 +9,89 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#pragma once
+
 #include "RequestDetails.hpp"
 #include <Storage.hpp>
 #include "WebSocketHandler.hpp"
 
+#include <Poco/URI.h>
+
 #include <string>
 
-class RequestVettingStation
+class CheckFileInfo;
+
+/// RequestVettingStation is used to vet the request in the background.
+/// Vetting for a WOPI request is performed through CheckFileInfo.
+/// Once the request checks out, we can proceed to creating a
+/// DocBroker and a Kit process.
+/// There are two ways to use this class. One is to create it when
+/// serving cool.html, the other when the WebSocket is created
+/// (by upgrading the socket).
+/// Unfortunately, when serving cool.html the connection is not the one
+/// used for the WebSocket. As such, it cannot be used to create
+/// DocBroker. Therefore, we work in two modes: we do the CheckFileInfo
+/// as soon as we serve cool.html, but then we need to wait for the
+/// WebSocket to create DocBroker.
+/// A small complication is that CheckFileInfo might not be done by
+/// then. Or, it might have timed out. Alternatively, the WebSocket
+/// might never arrive (say, because the user clicked away).
+/// We take these possibilities into account and support them here.
+class RequestVettingStation final : public std::enable_shared_from_this<RequestVettingStation>
 {
 public:
-    RequestVettingStation(const std::string& id, const std::shared_ptr<WebSocketHandler>& ws,
-                          const RequestDetails& requestDetails,
-                          const std::shared_ptr<StreamSocket>& socket, unsigned mobileAppDocId)
-        : _id(id)
-        , _ws(ws)
+    /// Create an instance with a SocketPoll and a RequestDetails instance.
+    RequestVettingStation(const std::shared_ptr<TerminatingPoll>& poll,
+                          const RequestDetails& requestDetails)
+        : _poll(poll)
         , _requestDetails(requestDetails)
-        , _socket(socket)
-        , _mobileAppDocId(mobileAppDocId)
+        , _mobileAppDocId(0)
     {
-        // Indicate to the client that document broker is searching.
-        static constexpr const char* const status = "statusindicator: find";
-        LOG_TRC("Sending to Client [" << status << ']');
-        _ws->sendMessage(status);
     }
 
-    inline void logPrefix(std::ostream& os) const { os << '#' << _socket->getFD() << ": "; }
+    inline void logPrefix(std::ostream& os) const
+    {
+        if (_socket)
+        {
+            os << '#' << _socket->getFD() << ": ";
+        }
+    }
 
-    void handleRequest(SocketPoll& poll, SocketDisposition& disposition);
+    /// Called when cool.html is served, to start the vetting as early as possible.
+    void handleRequest(const std::string& id);
+
+    /// Called when the WebSocket is connected (i.e. after cool.html is loaded in the browser).
+    void handleRequest(const std::string& id, const RequestDetails& requestDetails,
+                       const std::shared_ptr<WebSocketHandler>& ws,
+                       const std::shared_ptr<StreamSocket>& socket, unsigned mobileAppDocId,
+                       SocketDisposition& disposition);
 
 private:
-    void createDocBroker(const std::string& docKey, const std::string& url,
-                         const Poco::URI& uriPublic, const bool isReadOnly,
-                         Poco::JSON::Object::Ptr wopiInfo = nullptr);
+    bool createDocBroker(const std::string& docKey, const std::string& url,
+                         const Poco::URI& uriPublic);
 
-#if !MOBILEAPP
-    void checkFileInfo(SocketPoll& poll, const std::string& url, const Poco::URI& uriPublic,
-                       const std::string& docKey, bool isReadOnly, int redirectionLimit);
-#endif //!MOBILEAPP
+    void createClientSession(const std::string& docKey, const std::string& url,
+                             const Poco::URI& uriPublic, const bool isReadOnly);
+
+    /// Send unauthorized error to the client and disconnect the socket.
+    /// Includes SSL verification status, if available, as the error code.
+    void sendUnauthorizedErrorAndShutdown();
 
     /// Send an error to the client and disconnect the socket.
     static void sendErrorAndShutdown(const std::shared_ptr<WebSocketHandler>& ws,
                                      const std::string& msg,
                                      WebSocketHandler::StatusCodes statusCode);
 
-private:
-    const std::string _id;
+#if !MOBILEAPP
+    void checkFileInfo(const Poco::URI& uri, bool isReadOnly, int redirectionLimit);
+    std::unique_ptr<CheckFileInfo> _checkFileInfo;
+#endif // !MOBILEAPP
+
+    std::shared_ptr<TerminatingPoll> _poll;
+    std::string _id;
     std::shared_ptr<WebSocketHandler> _ws;
-    const RequestDetails _requestDetails;
-    const std::shared_ptr<StreamSocket> _socket;
-    std::shared_ptr<http::Session> _httpSession;
-    const unsigned _mobileAppDocId;
-    std::unique_ptr<WopiStorage::WOPIFileInfo> _wopiInfo;
-    LockContext _lockCtx;
+    RequestDetails _requestDetails;
+    std::shared_ptr<StreamSocket> _socket;
+    unsigned _mobileAppDocId;
+    std::shared_ptr<DocumentBroker> _docBroker;
 };

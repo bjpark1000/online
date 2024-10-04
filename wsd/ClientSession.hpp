@@ -50,6 +50,12 @@ public:
                WAIT_DISCONNECT // closed and waiting for Kit's disconnected message
     );
 
+    enum ViewMode {
+        NORMAL_VIEW = 0, // For all.
+        MASTER_VIEW = 1, // Impress master page view.
+        NOTES_VIEW = 2 // Impress notes view.
+    };
+
     /// Returns true if this session has loaded a view (i.e. we got status message).
     bool isViewLoaded() const { return _state == SessionState::LIVE; }
 
@@ -228,6 +234,9 @@ public:
     /// Do we recognize this clipboard ?
     bool matchesClipboardKeys(const std::string &viewId, const std::string &tag);
 
+    /// Handle presentation info request
+    bool handlePresentationInfo(const std::shared_ptr<Message>& payload, const std::shared_ptr<DocumentBroker>& docBroker);
+
     /// Handle a clipboard fetch / put request.
     void handleClipboardRequest(DocumentBroker::ClipboardRequest     type,
                                 const std::shared_ptr<StreamSocket> &socket,
@@ -320,6 +329,8 @@ private:
     /// If this session is read-only because of failed lock, try to unlock and make it read-write.
     bool attemptLock(const std::shared_ptr<DocumentBroker>& docBroker);
 
+    std::string getIsAdminUserStatus() const;
+
 private:
     std::weak_ptr<DocumentBroker> _docBroker;
 
@@ -364,7 +375,7 @@ private:
     int _clientSelectedPart;
 
     /// Selected mode of the presentation viewed by the client (in Impress)
-    int _clientSelectedMode;
+    ViewMode _clientSelectedMode;
 
     /// Zoom properties of the client
     int _tileWidthPixel;
@@ -419,6 +430,9 @@ private:
 
     /// the canonical id unique to the set of rendering properties of this session
     int _canonicalViewId;
+
+    /// If server audit was already sent
+    bool _sentAudit;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

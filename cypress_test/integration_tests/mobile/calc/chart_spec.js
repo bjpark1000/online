@@ -1,22 +1,16 @@
-/* global describe it cy beforeEach require afterEach expect*/
+/* global describe it cy beforeEach require expect*/
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var calcHelper = require('../../common/calc_helper');
 
 describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Chart tests.', function() {
-	var origTestFileName = 'chart.ods';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'calc');
+		helper.setupAndLoadDocument('calc/chart.ods');
 		mobileHelper.enableEditingMobile();
 		calcHelper.selectFirstColumn();
 		insertChart();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function insertChart() {
@@ -64,9 +58,9 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Chart tests.', function() {
 	it.skip('Change chart type.', function() {
 		stepIntoChartEditing();
 		mobileHelper.openMobileWizard();
-		helper.clickOnIdle('#ChartTypePanel');
-		helper.clickOnIdle('#cmb_chartType');
-		helper.clickOnIdle('.ui-combobox-text', 'Pie');
+		cy.cGet('#ChartTypePanel').click();
+		cy.cGet('#cmb_chartType').click();
+		cy.cGet('.ui-combobox-text', 'Pie').click();
 
 		// TODO: this leads to crash?
 		//mobileHelper.closeMobileWizard();

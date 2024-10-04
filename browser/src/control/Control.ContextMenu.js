@@ -12,7 +12,7 @@
  * Control.ContextMenu
  */
 
-/* global $ _ _UNO */
+/* global $ _ _UNO app GraphicSelection */
 L.Control.ContextMenu = L.Control.extend({
 	options: {
 		SEPARATOR: '---------',
@@ -37,6 +37,9 @@ L.Control.ContextMenu = L.Control.extend({
 					  'SetAnchorToChar', 'SetAnchorToFrame',
 					  'WrapMenu', 'WrapOff', 'WrapOn', 'WrapIdeal', 'WrapLeft', 'WrapRight', 'WrapThrough',
 					  'WrapThroughTransparencyToggle', 'WrapContour', 'WrapAnchorOnly',
+					  'ConvertMenu', 'ChangeBezier',
+					  'DistributeHorzCenter', 'DistributeHorzDistance','DistributeHorzLeft','DistributeHorzRight',
+					  'DistributeVertBottom', 'DistributeVertCenter', 'DistributeVertDistance', 'DistributeVertTop',
 					  'ArrangeFrameMenu', 'ArrangeMenu', 'BringToFront', 'ObjectForwardOne', 'ObjectBackOne', 'SendToBack',
 					  'RotateMenu', 'RotateLeft', 'RotateRight', 'TransformDialog', 'FormatLine', 'FormatArea',
 					  'FormatChartArea', 'InsertTitles', 'InsertRemoveAxes',
@@ -50,7 +53,8 @@ L.Control.ContextMenu = L.Control.extend({
 					  'InsertAxisTitle', 'InsertMinorGrid', 'InsertMajorGrid' , 'InsertAxis', 'DeleteMajorGrid' , 'DeleteMinorGrid',
 					  'SpellCheckIgnoreAll', 'LanguageStatus', 'SpellCheckApplySuggestion', 'PageDialog',
 					  'CompressGraphic', 'GraphicDialog', 'InsertCaptionDialog',
-					  'NextTrackedChange', 'PreviousTrackedChange', 'RejectTrackedChange', 'AcceptTrackedChange'],
+					  'AnimationEffects', 'ExecuteAnimationEffect',
+					  'NextTrackedChange', 'PreviousTrackedChange', 'RejectTrackedChange', 'AcceptTrackedChange', 'InsertAnnotation'],
 
 			text: ['TableInsertMenu',
 				   'InsertRowsBefore', 'InsertRowsAfter', 'InsertColumnsBefore', 'InsertColumnsAfter',
@@ -66,7 +70,7 @@ L.Control.ContextMenu = L.Control.extend({
 				      'RecalcPivotTable', 'DataDataPilotRun', 'DeletePivotTable',
 				      'FormatCellDialog', 'DeleteNote', 'SetAnchorToCell', 'SetAnchorToCellResize',
 				      'FormatSparklineMenu', 'InsertSparkline', 'DeleteSparkline', 'DeleteSparklineGroup',
-				      'EditSparklineGroup', 'EditSparkline', 'GroupSparklines', 'UngroupSparklines'],
+				      'EditSparklineGroup', 'EditSparkline', 'GroupSparklines', 'UngroupSparklines', 'AutoFill'],
 
 			presentation: ['SetDefault'],
 			drawing: []
@@ -97,7 +101,7 @@ L.Control.ContextMenu = L.Control.extend({
 			'SpellingAndGrammarDialog', 'FontDialog', 'FontDialogForParagraph',
 			// spreadsheet
 			'FormatCellDialog', 'DataDataPilotRun',
-			'GroupSparklines', 'UngroupSparklines'
+			'GroupSparklines', 'UngroupSparklines', 'AutoFill'
 		]
 	},
 
@@ -109,6 +113,7 @@ L.Control.ContextMenu = L.Control.extend({
 		map._contextMenu = this;
 		map.on('locontextmenu', this._onContextMenu, this);
 		map.on('mousedown', this._onMouseDown, this);
+		map.on('mouseup', this._onMouseUp, this);
 		map.on('keydown', this._onKeyDown, this);
 		map.on('closepopups', this._onClosePopup, this);
 	},
@@ -122,6 +127,10 @@ L.Control.ContextMenu = L.Control.extend({
 		this._prevMousePos = {x: e.originalEvent.pageX, y: e.originalEvent.pageY};
 
 		this._onClosePopup();
+	},
+
+	_onMouseUp: function (e) {
+		this._currMousePos = { x: e.originalEvent.pageX, y: e.originalEvent.pageY };
 	},
 
 	_onKeyDown: function(e) {
@@ -143,10 +152,20 @@ L.Control.ContextMenu = L.Control.extend({
 		this._amendContextMenuData(obj);
 
 		var contextMenu = this._createContextMenuStructure(obj);
+
+		if (Object.keys(contextMenu).length == 0) {
+			// We can sometimes end up filtering out everything in the menu ... in this case, there's nothing to display
+			return;
+		}
+
 		var spellingContextMenu = false;
+		var autoFillContextMenu = false;
 		for (var menuItem in contextMenu) {
 			if (menuItem.indexOf('.uno:SpellCheckIgnore') !== -1) {
 				spellingContextMenu = true;
+				break;
+			} else if (menuItem.indexOf('.uno:AutoFill') !== -1) {
+				autoFillContextMenu = true;
 				break;
 			}
 		}
@@ -159,10 +178,13 @@ L.Control.ContextMenu = L.Control.extend({
 				selector: '.leaflet-layer',
 				className: 'cool-font',
 				trigger: 'none',
+				zIndex: 1500,
 				build: function() {
 					return {
 						callback: function(key) {
-							if (map._clip === undefined || !map._clip.filterExecCopyPaste(key)) {
+							if (key === '.uno:InsertAnnotation') {
+								app.map.insertComment();
+							} else if (map._clip === undefined || !map._clip.filterExecCopyPaste(key)) {
 								map.sendUnoCommand(key);
 								// For spelling context menu we need to remove selection
 								if (spellingContextMenu)
@@ -176,14 +198,17 @@ L.Control.ContextMenu = L.Control.extend({
 				}
 			});
 
-			$('.leaflet-layer').contextMenu(this._prevMousePos);
+			if (autoFillContextMenu)
+				$('.leaflet-layer').contextMenu(this._currMousePos);
+			else
+				$('.leaflet-layer').contextMenu(this._prevMousePos);
 			this.hasContextMenu = true;
 		}
 	},
 
 	_amendContextMenuData: function(obj) {
 		// Add a 'delete' entry  for graphic selection on desktop and mobile device (in browser or app).
-		if (this._map._docLayer.hasGraphicSelection()) {
+		if (GraphicSelection.hasActiveSelection()) {
 			var insertIndex = -1;
 			obj.menu.forEach(function(item, index) {
 				if (item.command === '.uno:Paste') {
@@ -211,10 +236,26 @@ L.Control.ContextMenu = L.Control.extend({
 			}
 
 			// reduce Paste Special submenu
-			if (item.type === 'menu' && item.text.replace('~', '') === 'Paste Special'
+			if (item.type === 'menu' && item.text && item.text.replace('~', '') === 'Paste Special'
 				&& item.menu && item.menu.length) {
 				item.text = _('Paste Special');
 				item.command = '.uno:PasteSpecial';
+				item.type = item.menu[0].type;
+				item.menu = undefined;
+			}
+
+			if (item.type === 'command' && item.text && item.text.replace('~', '') === 'Copy Cells'
+				&& item.menu && item.menu.length) {
+				item.text = _('Copy Cells');
+				item.command = '.uno:AutoFill?Copy:bool=true';
+				item.type = item.menu[0].type;
+				item.menu = undefined;
+			}
+
+			if (item.type === 'command' && item.text && item.text.replace('~', '') === 'Fill Series'
+				&& item.menu && item.menu.length) {
+				item.text = _('Fill Series');
+				item.command = '.uno:AutoFill?Copy:bool=false';
 				item.type = item.menu[0].type;
 				item.menu = undefined;
 			}
@@ -256,7 +297,9 @@ L.Control.ContextMenu = L.Control.extend({
 				if (commandName == 'None' && !item.text)
 					continue;
 
-				if (hasParam || commandName === 'None' || commandName === 'FontDialogForParagraph' || commandName === 'Delete') {
+				if (hasParam || commandName === 'None' || commandName === 'FontDialogForParagraph' || commandName === 'Delete' || commandName == 'PasteSpecial') {
+					// These commands have a custom item.text, don't overwrite
+					// that with a label based on 'item.command'.
 					itemName = window.removeAccessKey(item.text);
 					itemName = itemName.replace(' ', '\u00a0');
 				} else {

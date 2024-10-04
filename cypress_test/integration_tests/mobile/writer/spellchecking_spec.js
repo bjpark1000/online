@@ -1,22 +1,16 @@
-/* global describe it cy beforeEach require afterEach expect*/
+/* global describe it cy beforeEach require expect*/
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var writerHelper = require('../../common/writer_helper');
 
 describe.skip('Spell checking menu.', function() {
-	var origTestFileName = 'spellchecking.odt';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		helper.setupAndLoadDocument('writer/spellchecking.odt');
 
 		// Click on edit button
 		mobileHelper.enableEditingMobile();
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	function openContextMenu() {
@@ -28,9 +22,9 @@ describe.skip('Spell checking menu.', function() {
 			.then(function(markers) {
 				expect(markers.length).to.have.greaterThan(1);
 				for (var i = 0; i < markers.length; i++) {
-					if (markers[i].classList.contains('leaflet-selection-marker-start')) {
+					if (markers[i].classList.contains('text-selection-handle-start')) {
 						var startPos = markers[i].getBoundingClientRect();
-					} else if (markers[i].classList.contains('leaflet-selection-marker-end')) {
+					} else if (markers[i].classList.contains('text-selection-handle-end')) {
 						var endPos = markers[i].getBoundingClientRect();
 					}
 				}

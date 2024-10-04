@@ -9,11 +9,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <config.h>
+
+// HostUtil is only used in non-mobile apps.
+#if !MOBILEAPP
+
 #include "HostUtil.hpp"
 #include <common/ConfigUtil.hpp>
 #include <common/Log.hpp>
 #include <common/CommandControl.hpp>
-#include <config.h>
 
 Util::RegexListMatcher HostUtil::WopiHosts;
 std::map<std::string, std::string> HostUtil::AliasHosts;
@@ -41,7 +45,7 @@ void HostUtil::parseWopiHost(Poco::Util::LayeredConfiguration& conf)
     }
 }
 
-void HostUtil::addWopiHost(std::string host, bool allow)
+void HostUtil::addWopiHost(const std::string& host, bool allow)
 {
     if (!host.empty())
     {
@@ -228,5 +232,7 @@ void HostUtil::setFirstHost(const Poco::URI& uri)
                 << ", To use multiple host/aliases check alias_groups tag in configuration");
     }
 }
+
+#endif // !MOBILEAPP
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

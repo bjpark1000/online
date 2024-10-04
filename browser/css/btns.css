@@ -9,6 +9,60 @@
 	border: 1px solid var(--color-border-lighter);
 }
 
+/* toolbuttons */
+
+.unotoolbutton .unobutton img {
+	width: var(--btn-size);
+	height: var(--btn-size);
+}
+.unotoolbutton .unobutton.selected + .ui-content.unolabel {
+	color: var(--color-text-dark);
+}
+/* toolbuttons non selected */
+#clearFormatting,
+.hasnotebookbar .ui-content.unotoolbutton.has-label,
+.hasnotebookbar .ui-content.unotoolbutton.inline,
+.hasnotebookbar .ui-content.unotoolbutton:not(.has-label):not(.inline),
+.sidebar.unotoolbutton,
+.jsdialog.unotoolbutton,
+#closebutton {
+	background-color: transparent;
+	border: 1px solid transparent;
+	color: var(--color-main-text);
+	border-radius: var(--border-radius);
+}
+/* toolbuttons selected */
+.hasnotebookbar .ui-content.unotoolbutton.selected.has-label,
+.hasnotebookbar .ui-content.unotoolbutton.selected.inline,
+.hasnotebookbar .ui-content.unotoolbutton.selected:not(.has-label):not(.inline),
+.sidebar.unotoolbutton.selected,
+.jsdialog.unotoolbutton.selected {
+	background-color: var(--color-background-dark);
+	border: 1px solid var(--color-border-dark);
+	color: var(--color-text-dark);
+	border-radius: var(--border-radius);
+}
+[data-theme='dark'] .hasnotebookbar .ui-content.unotoolbutton.selected.has-label,
+[data-theme='dark'] #toggledarktheme,
+[data-theme='dark'] .hasnotebookbar .ui-content.unotoolbutton.selected.inline,
+[data-theme='dark'] .hasnotebookbar .ui-content.unotoolbutton.selected:not(.has-label):not(.inline),
+[data-theme='dark'] .sidebar.unotoolbutton.selected {
+	background-color: var(--color-background-darker);
+	border-color: var(--color-border-darker);
+}
+/* toolbuttons selected hover */
+.hasnotebookbar .ui-content.unotoolbutton.selected:hover,
+.unotoolbutton.notebookbar:hover,
+.unotoolbutton.jsdialog:hover,
+.hasnotebookbar .ui-content.unotoolbutton.selected:not(.has-label):not(.inline):hover,
+.sidebar.unotoolbutton.selected:hover,
+.jsdialog.unotoolbutton.selected:hover {
+	background-color: var(--color-background-darker) !important;
+	border: 1px solid var(--color-border-darker);
+	color: var(--color-text-darker);
+	border-radius: var(--border-radius);
+}
+
 /*limit icon to button height*/
 button.jsdialog img {
 	max-height: 100%;
@@ -22,10 +76,10 @@ button.jsdialog img {
 }
 
 :not(.main-nav) .button-secondary,
-:not(.main-nav) > div > button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton):not(.form-field-button) {
+:not(.main-nav) > div > button:not(.ui-tab):not(.ui-corner-all):not(.button-primary):not(.unobutton):not(.form-field-button):not(.col) {
 	box-sizing: border-box;
 	height: 32px;
-	line-height: 0em;
+	line-height: normal;
 	color: var(--color-main-text);
 	font-size: var(--default-font-size);
 	min-width: 62px;
@@ -85,12 +139,14 @@ button.jsdialog img {
 }
 
 .jsdialog.ui-button-box-right {
+	grid-column: 2;
 	display: flex;
 	justify-self: end;
 	margin-inline-end: -5px;
 }
 
 .jsdialog.ui-button-box-left {
+	grid-column: 1;
 	display: flex;
 	justify-self: start;
 	margin-inline-start: -5px;

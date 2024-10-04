@@ -1,34 +1,28 @@
-/* global describe it cy require afterEach beforeEach */
+/* global describe it cy require beforeEach */
 
 var helper = require('../../common/helper');
-var { insertMultipleComment, selectZoomLevel, setupUIforCommentInsert, createComment } = require('../../common/desktop_helper');
+var { selectZoomLevel } = require('../../common/desktop_helper');
 var desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop'], 'Annotation Tests', function() {
-	var origTestFileName = 'annotation.odt';
-	var testFileName;
 
 	beforeEach(function() {
 		cy.viewport(1400, 600);
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		helper.setupAndLoadDocument('writer/annotation.odt');
 		desktopHelper.switchUIToNotebookbar();
 		cy.cGet('#optionscontainer div[id$="SidebarDeck.PropertyDeck"]').click(); // Hide sidebar.
 		selectZoomLevel('50');
 	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
-	});
-
 	it('Insert', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
 	});
 
 	it('Modify', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
@@ -41,7 +35,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 	});
 
 	it('Reply', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text');
@@ -53,7 +47,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 	});
 
 	it('Remove', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('.cool-annotation-content > div').should('contain','some text');
@@ -65,27 +59,25 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 });
 
 describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
-	var testFileName = 'annotation.odt';
+	var newFilePath;
 
 	beforeEach(function() {
-		helper.beforeAll(testFileName, 'writer');
+		newFilePath = helper.setupAndLoadDocument('writer/annotation.odt');
 		desktopHelper.switchUIToNotebookbar();
-		cy.cGet('#optionscontainer div[id$="SidebarDeck.PropertyDeck"]').click(); // Hide sidebar.
-	});
 
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		// TODO: skip sidebar detection on reload
+		// cy.cGet('#optionscontainer div[id$="SidebarDeck.PropertyDeck"]').click(); // Hide sidebar.
 	});
 
 	it('Insert', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
 	});
 
 	it('Modify', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
@@ -99,7 +91,7 @@ describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
 	});
 
 	it('Reply', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text');
@@ -112,7 +104,7 @@ describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
 	});
 
 	it('Remove', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('.cool-annotation-content > div').should('contain','some text');
@@ -122,57 +114,73 @@ describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('not.exist');
 	});
 
+	it('Autosave Collapse', function() {
+		desktopHelper.insertComment(undefined, false);
+		cy.cGet('#map').focus();
+		helper.typeIntoDocument('{home}');
+		cy.cGet('.cool-annotation-info-collapsed').should('have.text','!');
+		cy.cGet('.cool-annotation-info-collapsed').should('be.visible');
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('.cool-annotation-autosavelabel').should('be.visible');
+		cy.cGet('#annotation-save-1').click();
+		helper.typeIntoDocument('{home}');
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('.cool-annotation-autosavelabel').should('be.not.visible');
+		cy.cGet('.cool-annotation-info-collapsed').should('not.have.text','!');
+		cy.cGet('#map').focus();
+		helper.typeIntoDocument('{home}');
+		cy.cGet('.cool-annotation-info-collapsed').should('be.not.visible');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('#optionscontainer div[id$="SidebarDeck.PropertyDeck"]').click(); // show sidebar.
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('.cool-annotation-info-collapsed').should('be.not.visible');
+	})
+
 });
 
 describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
-	var origTestFileName = 'annotation.odt';
-	var testFileName;
+	var newFilePath;
 
 	beforeEach(function() {
 		cy.viewport(1400, 600);
-		testFileName = helper.beforeAll(origTestFileName, 'writer');
+		newFilePath = helper.setupAndLoadDocument('writer/annotation.odt');
 		desktopHelper.switchUIToNotebookbar();
-		cy.cGet('#optionscontainer div[id$="SidebarDeck.PropertyDeck"]').click(); // Hide sidebar.
+		// TODO: skip sidebar detection on reload
+		//cy.cGet('#optionscontainer div[id$="SidebarDeck.PropertyDeck"]').click(); // Hide sidebar.
 		selectZoomLevel('50');
-
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
 	});
 
 	it('Insert autosave', function() {
-		setupUIforCommentInsert('writer');
-		createComment('writer', 'Test Comment', false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment(undefined, false);
 		cy.cGet('#map').focus();
 		cy.cGet('.cool-annotation-autosavelabel').should('be.visible');
 		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
-		cy.cGet('#annotation-content-area-1').should('have.text','Test Comment');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 	});
 
 	it('Insert autosave save', function() {
-		setupUIforCommentInsert('writer');
-		createComment('writer', 'Test Comment', false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment(undefined, false);
 		cy.cGet('#map').focus();
 		cy.cGet('.cool-annotation-autosavelabel').should('be.visible');
 		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
 		cy.cGet('#annotation-save-1').click();
-		cy.cGet('#annotation-content-area-1').should('have.text','Test Comment');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('.cool-annotation-autosavelabel').should('be.not.visible');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
-		cy.cGet('#annotation-content-area-1').should('have.text','Test Comment');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 	});
 
 	it('Insert autosave cancel', function() {
-		setupUIforCommentInsert('writer');
-		createComment('writer', 'Test Comment', false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment(undefined, false);
 		cy.cGet('#map').focus();
 		cy.cGet('.cool-annotation-autosavelabel').should('be.visible');
 		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
@@ -180,14 +188,13 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('#comment-container-1').should('not.exist');
 		cy.cGet('.cool-annotation-autosavelabel').should('not.exist');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('not.exist');
 		cy.cGet('#comment-container-1').should('not.exist');
 	});
 
 	it('Modify autosave', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
@@ -198,14 +205,13 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-autosavelabel').should('be.visible');
 		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some other text, some text0');
 	});
 
 	it('Modify autosave save', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
@@ -219,14 +225,13 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('#annotation-content-area-1').should('have.text','some other text, some text0');
 		cy.cGet('.cool-annotation-autosavelabel').should('be.not.visible');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some other text, some text0');
 	});
 
 	it('Modify autosave cancel', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
@@ -241,14 +246,13 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-autosavelabel').should('be.not.visible');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 	});
 
 	it('Reply autosave', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
@@ -259,14 +263,13 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-autosavelabel').should('be.visible');
 		cy.cGet('#annotation-modify-textarea-2').should('be.visible');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-2').should('have.text','some reply text');
 	});
 
 	it('Reply autosave save', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
@@ -283,14 +286,13 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#annotation-content-area-2').should('have.text','some reply text');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-2').should('have.text','some reply text');
 	});
 
 	it('Reply autosave cancel', function() {
-		insertMultipleComment('writer', 1, false, '[id=insert-insert-annotation]');
+		desktopHelper.insertComment();
 
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
@@ -309,8 +311,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('#comment-container-1 .cool-annotation-autosavelabel').should('be.not.visible');
 		cy.cGet('#comment-container-2 .cool-annotation-autosavelabel').should('not.exist');
 
-		helper.closeDocument(testFileName, '');
-		helper.beforeAll(testFileName, 'writer', true, false, false, true);
+		helper.reloadDocument(newFilePath);
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#annotation-content-area-2').should('not.exist');

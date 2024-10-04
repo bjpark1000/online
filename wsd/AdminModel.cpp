@@ -219,7 +219,7 @@ std::string AdminModel::getAllHistory() const
         separator1 = ",";
     }
     oss << "], \"expiredDocuments\" : [";
-    separator1 = "";
+    separator1.clear();
     for (const auto& ed : _expiredDocuments)
     {
         oss << separator1;
@@ -301,8 +301,8 @@ unsigned AdminModel::getKitsMemoryUsage()
 
     if (docs > 0)
     {
-        LOG_TRC("Got total Kits memory of " << totalMem << " bytes for " << docs <<
-                " docs, avg: " << static_cast<double>(totalMem) / docs << " bytes / doc.");
+        LOGA_TRC(Admin, "Got total Kits memory of " << totalMem << " bytes for " << docs <<
+                 " docs, avg: " << static_cast<double>(totalMem) / docs << " bytes / doc.");
     }
 
     return totalMem;
@@ -1353,6 +1353,12 @@ void AdminModel::routeTokenSanityCheck()
     std::ostringstream oss;
     oss << "routetoken_sanity_check";
     notify(oss.str());
+}
+
+void AdminModel::sendShutdownReceivedMsg()
+{
+    ASSERT_CORRECT_THREAD_OWNER(_owner);
+    notify("shutdown_received");
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

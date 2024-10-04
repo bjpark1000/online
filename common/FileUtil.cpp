@@ -16,6 +16,8 @@
 #include <dirent.h>
 #include <exception>
 #include <ftw.h>
+#include <grp.h>
+#include <pwd.h>
 #include <stdexcept>
 #include <sys/time.h>
 #ifdef __linux__
@@ -32,21 +34,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <mutex>
 #include <string>
-
-#if HAVE_STD_FILESYSTEM
-# if HAVE_STD_FILESYSTEM_EXPERIMENTAL
-#  include <experimental/filesystem>
-namespace filesystem = ::std::experimental::filesystem;
-# else
-#  include <filesystem>
-namespace filesystem = ::std::filesystem;
-# endif
-#else
-# include <Poco/TemporaryFile.h>
-#endif
 
 #include <Poco/File.h>
 #include <Poco/Path.h>
@@ -60,11 +51,7 @@ namespace FileUtil
     std::string createRandomDir(const std::string& path)
     {
         std::string name = Util::rng::getFilename(64);
-#if HAVE_STD_FILESYSTEM
-        filesystem::create_directory(path + '/' + name);
-#else
-        Poco::File(Poco::Path(path, name)).createDirectories();
-#endif
+        std::filesystem::create_directory(path + '/' + name);
         return name;
     }
 
@@ -151,11 +138,7 @@ namespace FileUtil
     std::string getSysTempDirectoryPath()
     {
         // Don't const to allow for automatic move on return.
-#if HAVE_STD_FILESYSTEM
-        std::string path = filesystem::temp_directory_path();
-#else
-        std::string path = Poco::Path::temp();
-#endif
+        std::string path = std::filesystem::temp_directory_path();
 
         if (!path.empty())
             return path;
@@ -188,7 +171,7 @@ namespace FileUtil
         return newTmp;
     }
 
-    std::string createTmpDir(std::string dirName, std::string root)
+    std::string createTmpDir(const std::string& dirName, std::string root)
     {
         if (root.empty())
             root = getSysTempDirectoryPath();
@@ -231,9 +214,9 @@ namespace FileUtil
 #if 0 // HAVE_STD_FILESYSTEM
         std::error_code ec;
         if (recursive)
-            filesystem::remove_all(path, ec);
+            std::filesystem::remove_all(path, ec);
         else
-            filesystem::remove(path, ec);
+            std::filesystem::remove(path, ec);
 
         // Already removed or we don't care about failures.
         (void) ec;
@@ -265,6 +248,25 @@ namespace FileUtil
             }
         }
 #endif
+    }
+
+    /// Remove directories only, which must be empty for this to work.
+    static int nftw_rmdir_cb(const char* fpath, const struct stat*, int type, struct FTW*)
+    {
+        if (type == FTW_DP)
+        {
+            rmdir(fpath);
+        }
+
+        // Always continue even when things go wrong.
+        return 0;
+    }
+
+    void removeEmptyDirTree(const std::string& path)
+    {
+        LOG_DBG("Removing empty directories at [" << path << "] recursively");
+
+        nftw(path.c_str(), nftw_rmdir_cb, 128, FTW_DEPTH | FTW_PHYS);
     }
 
     std::string realpath(const char* path)
@@ -384,46 +386,45 @@ namespace FileUtil
 
     std::unique_ptr<std::vector<char>> readFile(const std::string& path, int maxSize)
     {
-        const int fd = ::open(path.c_str(), O_RDONLY);
-        if (fd < 0)
-            return nullptr;
+        auto data = std::make_unique<std::vector<char>>(maxSize);
+        return (readFile(path, *data, maxSize) >= 0) ? std::move(data) : nullptr;
+    }
 
-        struct stat st;
-        if (::fstat(fd, &st) != 0 || st.st_size > maxSize)
+    std::string buildLocalPathToJail(bool usingMountNamespaces, std::string localStorePath, std::string localPath)
+    {
+        // Use where mountJail of kit/Kit.cpp mounts /tmp for this path *from* rather than
+        // where it is mounted *to*, so this process doesn't need the mount visible to it
+        if (usingMountNamespaces && !localPath.empty())
         {
-            ::close(fd);
-            return nullptr;
+            Poco::Path jailPath(localPath);
+            const std::string jailPathDir = jailPath[0];
+            if (jailPathDir == "tmp")
+            {
+                jailPath.popFrontDirectory();
+
+                Poco::Path localStorageDir(localStorePath);
+                localStorageDir.makeDirectory();
+                const std::string jailId = localStorageDir[localStorageDir.depth() - 1];
+                localStorageDir.popDirectory();
+
+                localStorageDir.pushDirectory(jailPathDir);
+
+                std::string tmpMapping("cool-");
+                tmpMapping.append(jailId);
+
+                localStorageDir.pushDirectory(tmpMapping);
+
+                localStorePath = localStorageDir.toString();
+
+                localPath = jailPath.toString();
+            }
         }
 
-        auto data = std::make_unique<std::vector<char>>(st.st_size);
-        off_t off = 0;
-        for (;;)
-        {
-            if (st.st_size == 0)
-            {
-                // Nothing to read.
-                break;
-            }
+        // /chroot/jailId/user/doc/childId
+        const Poco::Path rootPath = Poco::Path(localStorePath, localPath);
+        Poco::File(rootPath).createDirectories();
 
-            int n;
-            while ((n = ::read(fd, &(*data)[off], st.st_size)) < 0 && errno == EINTR)
-            {
-            }
-
-            if (n <= 0)
-            {
-                if (n == 0) // EOF.
-                    break;
-
-                ::close(fd);
-                return nullptr; // Error.
-            }
-
-            off += n;
-        }
-
-        close(fd);
-        return data;
+        return rootPath.toString();
     }
 
 } // namespace FileUtil
@@ -493,7 +494,7 @@ namespace FileUtil
         if (cacheLastCheck)
         {
             // Don't check more often than once a minute
-            if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCheck).count() < 60)
+            if ((now - lastCheck) < std::chrono::minutes(1))
                 return lastResult;
 
             lastCheck = now;
@@ -519,11 +520,12 @@ namespace FileUtil
     {
         assert(!path.empty());
 
-#if !MOBILEAPP
-        bool hookResult = true;
-        if (UnitBase::get().filterCheckDiskSpace(path, hookResult))
-            return hookResult;
-#endif
+        if (!Util::isMobileApp())
+        {
+            bool hookResult = true;
+            if (UnitBase::get().filterCheckDiskSpace(path, hookResult))
+                return hookResult;
+        }
 
         // we should be able to run just OK with 5GB for production or 1GB for development
 #if defined(__linux__) || defined(__FreeBSD__) || defined(IOS)
@@ -538,7 +540,10 @@ namespace FileUtil
 #if defined(__linux__) || defined(__FreeBSD__)
         struct statfs sfs;
         if (statfs(path.c_str(), &sfs) == -1)
-            return true;
+        {
+            LOG_SYS("Failed to stat filesystem [" << path << ']');
+            return true; // We assume the worst.
+        }
 
         const int64_t freeBytes = static_cast<int64_t>(sfs.f_bavail) * sfs.f_bsize;
 
@@ -594,6 +599,201 @@ namespace FileUtil
         return Util::splitLast(path, '.', true).second;
     }
 
+    void lslr(const std::string& path)
+    {
+        std::cout << path << ":\n";
+
+        DIR* dir = opendir(path.c_str());
+        if (dir == nullptr)
+        {
+            std::cerr << "lslr: fail to open: " << dir << " error: " << std::strerror(errno) << std::endl;
+            return;
+        }
+
+        struct sb
+        {
+            mode_t _mode;
+            nlink_t _nlink;
+            std::string _uid;
+            std::string _gid;
+            off_t _size;
+            time_t _mtime;
+            std::string _name;
+
+            sb(mode_t mode, nlink_t nlink, std::string uid, std::string gid, off_t size, time_t mtime, std::string name)
+                : _mode(mode)
+                , _nlink(nlink)
+                , _uid(std::move(uid))
+                , _gid(std::move(gid))
+                , _size(size)
+                , _mtime(mtime)
+                , _name(std::move(name))
+            {
+            }
+        };
+
+        std::vector<sb> entries;
+        std::vector<std::string> subdirs;
+        size_t nlink_len = 0;
+        size_t size_len = 0;
+        size_t uid_len = 0;
+        size_t gid_len = 0;
+        size_t blocks = 0;
+
+        while (const dirent* f = readdir(dir))
+        {
+            std::string fullpath(path);
+            if (!fullpath.ends_with("/"))
+                fullpath.append("/");
+            fullpath.append(f->d_name);
+
+            struct stat statbuf;
+            if (lstat(fullpath.c_str(), &statbuf) != 0)
+            {
+                std::cerr << "lslr: fail to lstat: " << fullpath << " error: " << std::strerror(errno) << std::endl;
+                continue;
+            }
+
+            size_len = std::max(size_len, std::to_string(statbuf.st_size).size());
+            nlink_len = std::max(nlink_len, std::to_string(statbuf.st_nlink).size());
+
+            std::string uid;
+            struct passwd *pwd = getpwuid(statbuf.st_uid);
+            if (pwd && pwd->pw_name)
+                uid = pwd->pw_name;
+            else
+                uid = std::to_string(statbuf.st_uid);
+            uid_len = std::max(uid_len, uid.size());
+
+            std::string gid;
+            struct group *grp = getgrgid(statbuf.st_gid);
+            if (grp && grp->gr_name)
+                gid = grp->gr_name;
+            else
+                gid = std::to_string(statbuf.st_gid);
+
+            entries.emplace_back(statbuf.st_mode, statbuf.st_nlink, uid, gid, statbuf.st_size, statbuf.st_mtime, f->d_name);
+
+            if (strcmp(f->d_name, ".") != 0 && strcmp(f->d_name, "..") != 0 && (statbuf.st_mode & S_IFMT) == S_IFDIR)
+                subdirs.push_back(fullpath);
+
+            blocks += statbuf.st_blocks;
+        }
+
+        std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs)
+                  { return strcasecmp(lhs._name.c_str(), rhs._name.c_str()) < 0; });
+        std::sort(subdirs.begin(), subdirs.end(), [](const auto& lhs, const auto& rhs)
+                  { return strcasecmp(lhs.c_str(), rhs.c_str()) < 0; });
+
+        closedir(dir);
+
+        // turn 512 blocks into ls-alike default 1024 byte blocks
+        std::cout << "total " << (blocks + 1) / 2 << "\n";
+
+        for (const auto& entry : entries)
+        {
+            bool symbolic_link = false;
+
+            switch (entry._mode & S_IFMT)
+            {
+                case S_IFREG:
+                    std::cout << '-';
+                    break;
+                case S_IFBLK:
+                    std::cout << 'b';
+                    break;
+                case S_IFCHR:
+                    std::cout << 'c';
+                    break;
+                case S_IFDIR:
+                    std::cout << 'd';
+                    break;
+                case S_IFLNK:
+                    std::cout << 'l';
+                    symbolic_link = true;
+                    break;
+                case S_IFIFO:
+                    std::cout << 'p';
+                    break;
+                case S_IFSOCK:
+                    std::cout << 's';
+                    break;
+                default:
+                    std::cout << '?';
+                    break;
+                break;
+            }
+
+            std::cout << ((entry._mode & S_IRUSR) ? "r" : "-");
+            std::cout << ((entry._mode & S_IWUSR) ? "w" : "-");
+            std::cout << ((entry._mode & S_IXUSR) ? "x" : "-");
+            std::cout << ((entry._mode & S_IRGRP) ? "r" : "-");
+            std::cout << ((entry._mode & S_IWGRP) ? "w" : "-");
+            std::cout << ((entry._mode & S_IXGRP) ? "x" : "-");
+            std::cout << ((entry._mode & S_IROTH) ? "r" : "-");
+            std::cout << ((entry._mode & S_IWOTH) ? "w" : "-");
+            std::cout << ((entry._mode & S_IXOTH) ? "x" : "-");
+
+            std::cout << " " << std::right << std::setw(nlink_len) << entry._nlink;
+
+            std::cout << " " << std::left << std::setw(uid_len) << entry._uid;
+
+            std::cout << " " << std::left << std::setw(gid_len) << entry._gid;
+
+            std::cout << " " << std::right << std::setw(size_len) << entry._size;
+
+            struct tm tm;
+            std::cout << " " << std::put_time(localtime_r(&entry._mtime, &tm), "%F %R");
+
+            std::cout << " " << entry._name;
+
+            if (symbolic_link)
+            {
+                std::string fullpath(path);
+                fullpath.append("/").append(entry._name);
+
+                const std::size_t size = entry._size;
+                std::vector<char> target(size + 1);
+                char* target_data = target.data();
+                const ssize_t read = readlink(fullpath.c_str(), target_data, size);
+                if (read <= 0 || static_cast<std::size_t>(read) > size)
+                    std::cerr << "lslr: fail to read: " << fullpath << " error: " << std::strerror(errno) << std::endl;
+                else
+                {
+                    target_data[read] = '\0';
+                    std::cout << " -> " << target.data();
+                }
+            }
+
+            std::cout << "\n";
+        }
+
+        for (const auto& subdir : subdirs)
+        {
+            std::cout << "\n";
+            lslr(subdir);
+        }
+    }
+
+    std::vector<std::string> getDirEntries(const std::string dirPath)
+    {
+        std::vector<std::string> names;
+        DIR *dir = opendir(dirPath.c_str());
+        if (!dir)
+        {
+            LOG_DBG("Read from non-existent directory " + dirPath);
+            return names;
+        }
+        struct dirent *i;
+        while ((i = readdir(dir)))
+        {
+            if (i->d_name[0] == '.')
+                continue;
+            names.push_back(i->d_name);
+        }
+        closedir(dir);
+        return names;
+    }
 } // namespace FileUtil
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

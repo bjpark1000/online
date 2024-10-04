@@ -1,19 +1,13 @@
-/* global describe it cy beforeEach require afterEach expect */
+/* global describe it cy beforeEach require expect */
 
 var helper = require('../../common/helper');
 var mobileHelper = require('../../common/mobile_helper');
 var impressHelper = require('../../common/impress_helper');
 
 describe(['tagmobile', 'tagproxy'], 'Impress focus tests', function() {
-	var origTestFileName = 'focus.odp';
-	var testFileName;
 
 	beforeEach(function() {
-		testFileName = helper.beforeAll(origTestFileName, 'impress');
-	});
-
-	afterEach(function() {
-		helper.afterAll(testFileName, this.currentTest.state);
+		helper.setupAndLoadDocument('impress/focus.odp');
 	});
 
 	it('Select text box, no editing', function() {
@@ -45,13 +39,14 @@ describe(['tagmobile', 'tagproxy'], 'Impress focus tests', function() {
 		cy.wait(1000);
 
 		// Shape selection.
-		cy.cGet('.leaflet-pane.leaflet-overlay-pane svg g').should('exist');
+		cy.cGet('#document-container svg g').should('exist');
 
 		// But no editing.
 		impressHelper.assertNotInTextEditMode();
 	});
 
 	it('Double-click to edit', function() {
+		helper.setDummyClipboardForCopy();
 
 		mobileHelper.enableEditingMobile();
 
@@ -62,7 +57,7 @@ describe(['tagmobile', 'tagproxy'], 'Impress focus tests', function() {
 
 		cy.wait(1000);
 
-		impressHelper.typeTextAndVerify('Hello Impress');
+		impressHelper.typeTextAndVerify('Hello Impress', undefined, true);
 
 		// End editing.
 		helper.typeIntoDocument('{esc}');
@@ -75,7 +70,7 @@ describe(['tagmobile', 'tagproxy'], 'Impress focus tests', function() {
 		// Clear the text.
 		helper.clearAllText();
 
-		impressHelper.typeTextAndVerify('Bazinga Impress');
+		impressHelper.typeTextAndVerify('Bazinga Impress', undefined, true);
 	});
 
 	it.skip('Single-click to edit', function() {

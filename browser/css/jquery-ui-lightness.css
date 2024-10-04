@@ -923,7 +923,7 @@ button.ui-button::-moz-focus-inner {
 [data-title]:after {
 	padding: 7px 9px;
 	position: absolute;
-	z-index: 9999;
+	z-index: 1105;
 	max-width: 300px;
 	background: var(--color-background-lighter);
 }
@@ -937,6 +937,9 @@ body .ui-tooltip,
 	font-size: 0.8em;
 	color: var(--color-main-text);
 	background: var(--color-background-lighter);
+}
+.ui-tooltip.ui-widget-shadow {
+	box-shadow: 0px 0px 4px 0 var(--color-box-shadow);
 }
 
 /* Interaction states

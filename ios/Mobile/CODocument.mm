@@ -101,17 +101,8 @@ static std::atomic<unsigned> appDocIdCounter(1);
 }
 
 - (void)send2JS:(const char *)buffer length:(int)length {
-    LOG_TRC("To JS: " << COOLProtocol::getAbbreviatedMessage(buffer, length).c_str());
+    LOG_DBG("To JS: " << COOLProtocol::getAbbreviatedMessage(buffer, length).c_str());
 
-    const unsigned char *ubufp = (const unsigned char *)buffer;
-    std::vector<char> data;
-    // Reserve the maxiumum possible length after encoding
-    // This avoids an excessive number of reallocations. This is overkill
-    // for non-binary messages, but most non-binary messages appear to be
-    // under 1K bytes in length. In contrast, it appears that binary
-    // messags routinely use at least 75% of the maximum possible length.
-    data.reserve((length * 4) + 1);
-    bool newlineFound = false;
     bool binaryMessage = (isMessageOfType(buffer, "tile:", length) ||
                           isMessageOfType(buffer, "tilecombine:", length) ||
                           isMessageOfType(buffer, "delta:", length) ||
@@ -119,36 +110,32 @@ static std::atomic<unsigned> appDocIdCounter(1);
                           isMessageOfType(buffer, "rendersearchlist:", length) ||
                           isMessageOfType(buffer, "windowpaint:", length));
 
-    const char *pretext = "window.TheFakeWebSocket.onmessage({'data': '";
+    const char *pretext = binaryMessage ? "window.TheFakeWebSocket.onmessage({'data': window.atob('"
+                                        : "window.TheFakeWebSocket.onmessage({'data': window.b64d('";
+    const char *posttext = "')});";
     const int pretextlen = strlen(pretext);
+    const int posttextlen = strlen(posttext);
+
+    std::vector<char> data;
+    // Reserve the maxiumum possible length after encoding
+    // This avoids an excessive number of reallocations. This is overkill
+    // for non-binary messages, but most non-binary messages appear to be
+    // under 1K bytes in length. In contrast, it appears that binary
+    // messags routinely use at least 75% of the maximum possible length.
+    data.reserve(pretextlen + (length * 4) + posttextlen + 1);
+
     for (int i = 0; i < pretextlen; i++)
         data.push_back(pretext[i]);
 
-    for (int i = 0; i < length; i++) {
-        // Another fix for issue #5843 limit non-ASCII escaping to only
-        // certain message types
-        if (binaryMessage && !newlineFound && ubufp[i] == '\n')
-            newlineFound = true;
+    @autoreleasepool {
+        const NSData * payload = [NSData dataWithBytesNoCopy:const_cast<char*>(buffer) length:length freeWhenDone:NO];
+        const NSString * encodedPayload = [payload base64EncodedStringWithOptions: 0];
+        const std::string_view utf8EncodedPayload = [encodedPayload UTF8String];
 
-        // Fix issue #5843 escape non-ASCII characters only for image data
-        // Passing non-ASCII, UTF-8 text from native to JavaScript works
-        // fine, but images become corrupted if any non-ASCII bytes are
-        // not escaped.
-        // The Socket._extractTextImg() JavaScript function assumes that,
-        // in the iOS app, the first newline separates text from image data
-        // so assume all bytes after the first new line are image data.
-        if (ubufp[i] < ' ' || ubufp[i] == '\'' || ubufp[i] == '\\' || (newlineFound && ubufp[i] >= 0x80)) {
-            data.push_back('\\');
-            data.push_back('x');
-            data.push_back("0123456789abcdef"[(ubufp[i] >> 4) & 0x0F]);
-            data.push_back("0123456789abcdef"[ubufp[i] & 0x0F]);
-        } else {
-            data.push_back(ubufp[i]);
-        }
+        for (const char& character : utf8EncodedPayload)
+            data.push_back(character);
     }
 
-    const char *posttext = "'});";
-    const int posttextlen = strlen(posttext);
     for (int i = 0; i < posttextlen; i++)
         data.push_back(posttext[i]);
 

@@ -12,7 +12,7 @@
  * L.Control.PartsPreview
  */
 
-/* global _ app $ Hammer w2ui _UNO cool */
+/* global _ app $ Hammer _UNO cool */
 L.Control.PartsPreview = L.Control.extend({
 	options: {
 		fetchThumbnail: true,
@@ -41,6 +41,8 @@ L.Control.PartsPreview = L.Control.extend({
 		this._partsPreviewCont = preview;
 		this._partsPreviewCont.onscroll = this._onScroll.bind(this);
 		this._idNum = 0;
+		this._width = 0;
+		this._height = 0;
 	},
 
 	onAdd: function (map) {
@@ -49,9 +51,6 @@ L.Control.PartsPreview = L.Control.extend({
 		this._direction = this.options.allowOrientation ?
 			(!window.mode.isDesktop() && L.DomUtil.isPortrait() ? 'x' : 'y') :
 			this.options.axis;
-		this._scrollY = 0;
-		// Hack for access this function outside of this class
-		map.isPreviewVisible = L.bind(this._isPreviewVisible, this);
 
 		map.on('updateparts', this._updateDisabled, this);
 		map.on('updatepart', this._updatePart, this);
@@ -59,8 +58,11 @@ L.Control.PartsPreview = L.Control.extend({
 		map.on('tilepreview', this._updatePreview, this);
 		map.on('insertpage', this._insertPreview, this);
 		map.on('deletepage', this._deletePreview, this);
-		map.on('scrolllimits', this._updateAllPreview, this);
+		map.on('scrolllimits', this._invalidateParts, this);
 		map.on('scrolltopart', this._scrollToPart, this);
+		map.on('beforerequestpreview', this._beforeRequestPreview, this);
+
+		window.addEventListener('resize', L.bind(this._resize, this));
 	},
 
 	createScrollbar: function () {
@@ -88,8 +90,6 @@ L.Control.PartsPreview = L.Control.extend({
 					}, this), 500);
 				}
 
-				var bottomBound = this._getBottomBound();
-
 				// Add a special frame just as a drop-site for reordering.
 				var frameClass = 'preview-frame ' + this.options.frameClass;
 				var frame = L.DomUtil.create('div', frameClass, this._partsPreviewCont);
@@ -104,7 +104,7 @@ L.Control.PartsPreview = L.Control.extend({
 
 				// Create the preview parts
 				for (var i = 0; i < parts; i++) {
-					this._previewTiles.push(this._createPreview(i, e.partNames[i], bottomBound));
+					this._previewTiles.push(this._createPreview(i, e.partNames[i]));
 				}
 				if (!app.file.fileBasedView)
 					L.DomUtil.addClass(this._previewTiles[selectedPart], 'preview-img-currentpart');
@@ -164,18 +164,26 @@ L.Control.PartsPreview = L.Control.extend({
 		}
 	},
 
-	_updateAllPreview: function () {
-		if (this._previewTiles.length === 0) {
-			return;
-		}
+	isPaddingClick: function (element, e, part) {
+		var style = window.getComputedStyle(element, null);
+		var nTop = parseInt(style.getPropertyValue('padding-top'));
+		var nRight = parseFloat(style.getPropertyValue('padding-right'));
+		var nLeft = parseFloat(style.getPropertyValue('padding-left'));
+		var nBottom = parseFloat(style.getPropertyValue('padding-bottom'));
+		var width = element.offsetWidth;
+		var height = element.offsetHeight;
+		var x = parseFloat(e.offsetX);
+		var y = parseFloat(e.offsetY);
 
-		var bottomBound = this._getBottomBound();
-		for (var prev = 0; prev < this._previewTiles.length; prev++) {
-			this._layoutPreview(prev, this._previewTiles[prev], bottomBound);
-		}
+		if (part === 'top')         // Clicked on top padding?
+			return !(y > nTop);
+		else if (part === 'bottom') // Clicked on bottom padding?
+			return !(y < height - nBottom);
+		else                        // Clicked on any padding?
+			return !((x > nLeft && x < width - nRight) && (y > nTop && y < height - nBottom));
 	},
 
-	_createPreview: function (i, hashCode, bottomBound) {
+	_createPreview: function (i, hashCode) {
 		var frameClass = 'preview-frame ' + this.options.frameClass;
 		var frame = L.DomUtil.create('div', frameClass, this._partsPreviewCont);
 		frame.id = 'preview-frame-part-' + this._idNum;
@@ -187,7 +195,7 @@ L.Control.PartsPreview = L.Control.extend({
 		img.setAttribute('alt', _('preview of page ') + String(i + 1));
 		img.id = 'preview-img-part-' + this._idNum;
 		img.hash = hashCode;
-		L.LOUtil.setImage(img, 'preview_placeholder.png', this._map);
+		img.src = document.querySelector('meta[name="previewSmile"]').content;
 		img.fetched = false;
 		if (!window.mode.isDesktop()) {
 			(new Hammer(img, {recognizers: [[Hammer.Press]]}))
@@ -209,7 +217,7 @@ L.Control.PartsPreview = L.Control.extend({
 					// Remove selection to get the slide properties in mobile wizard.
 					app.socket.sendMessage('resetselection');
 					setTimeout(function () {
-						w2ui['actionbar'].click('mobile_wizard');
+						app.dispatcher.dispatch('mobile_wizard');
 					}, 0);
 				}
 			} else {
@@ -227,19 +235,25 @@ L.Control.PartsPreview = L.Control.extend({
 		}, this);
 
 		var that = this;
-		var pcw = document.getElementById('presentation-controls-wrapper');
-
-		L.DomEvent.on(pcw, 'contextmenu', function(e) {
+		L.DomEvent.on(frame, 'contextmenu', function(e) {
 			var isMasterView = this._map['stateChangeHandler'].getItemValue('.uno:SlideMasterPage');
+			var pcw = document.getElementById('presentation-controls-wrapper');
 			var $trigger = $(pcw);
 			if (isMasterView === 'true') {
 				$trigger.contextMenu(false);
 				return;
 			}
+
+			var nPos = undefined;
+			if (this.isPaddingClick(frame, e, 'top'))
+				nPos = that._findClickedPart(frame) - 1;
+			else if (this.isPaddingClick(frame, e, 'bottom'))
+				nPos = that._findClickedPart(frame);
+
 			$trigger.contextMenu(true);
 			that._setPart(e);
 			$.contextMenu({
-				selector: '#presentation-controls-wrapper',
+				selector: '#'+frame.id,
 				className: 'cool-font',
 				items: {
 					paste: {
@@ -257,7 +271,7 @@ L.Control.PartsPreview = L.Control.extend({
 					},
 					newslide: {
 						name: _UNO(that._map._docLayer._docType == 'presentation' ? '.uno:InsertSlide' : '.uno:InsertPage', 'presentation'),
-						callback: function() { that._map.insertPage(); }
+						callback: function() { that._map.insertPage(nPos); }
 					}
 				}
 			});
@@ -308,7 +322,7 @@ L.Control.PartsPreview = L.Control.extend({
 					},
 					delete: {
 						name: _UNO(that._map._docLayer._docType == 'presentation' ? '.uno:DeleteSlide' : '.uno:DeletePage', 'presentation'),
-						callback: function() { that._map.dispatch('deletepage'); },
+						callback: function() { app.dispatcher.dispatch('deletepage'); },
 						visible: function() {
 							return that._map._docLayer._parts > 1;
 						}
@@ -349,80 +363,18 @@ L.Control.PartsPreview = L.Control.extend({
 			});
 		}, this);
 
-		this._layoutPreview(i, img, bottomBound);
+		var imgSize = this._map.getPreview(i, i,
+						   this.options.maxWidth,
+						   this.options.maxHeight,
+						   {autoUpdate: this.options.autoUpdate,
+						    fetchThumbnail: false});
+
+		L.DomUtil.setStyle(img, 'width', imgSize.width + 'px');
+		L.DomUtil.setStyle(img, 'height', imgSize.height + 'px');
+
 		this._idNum++;
 
 		return img;
-	},
-
-	_getBottomBound: function () {
-		var previewContBB = this._partsPreviewCont.getBoundingClientRect();
-		var bottomBound;
-
-		// is not visible yet, assume map bounds
-		if (previewContBB.right === 0 && previewContBB.bottom === 0) {
-			previewContBB = this._map._container.getBoundingClientRect();
-		}
-
-		if (this._direction === 'x') {
-			this._previewContTop = previewContBB.left;
-			bottomBound = previewContBB.right + previewContBB.width / 2;
-		} else {
-			this._previewContTop = previewContBB.top;
-			bottomBound = previewContBB.bottom + previewContBB.height / 2;
-		}
-
-		return bottomBound;
-	},
-
-	_layoutPreview: function (i, img, bottomBound) {
-		var topBound = this._previewContTop;
-		var previewFrameTop = 0;
-		var previewFrameBottom = 0;
-		if (i > 0) {
-			if (!bottomBound) {
-				var previewContBB = this._partsPreviewCont.getBoundingClientRect();
-				if (this._direction === 'x') {
-					bottomBound = this._previewContTop + previewContBB.width + previewContBB.width / 2;
-				} else {
-					bottomBound = this._previewContTop + previewContBB.height + previewContBB.height / 2;
-				}
-			}
-			previewFrameTop = this._previewContTop + this._previewFrameMargin + i * (this._previewFrameHeight + this._previewFrameMargin);
-			previewFrameTop -= this._scrollY;
-			previewFrameBottom = previewFrameTop + this._previewFrameHeight;
-		}
-
-		var imgSize;
-		if (i === 0 || (previewFrameTop >= topBound && previewFrameTop <= bottomBound)
-			|| (previewFrameBottom >= topBound && previewFrameBottom <= bottomBound)) {
-			imgSize = this._map.getPreview(i, i, this.options.maxWidth, this.options.maxHeight, {autoUpdate: this.options.autoUpdate, fetchThumbnail: this.options.fetchThumbnail});
-
-			if (this._direction === 'x') {
-				L.DomUtil.setStyle(img, 'width', '');
-			} else {
-				L.DomUtil.setStyle(img, 'height', '');
-			}
-		}
-
-		if (i === 0) {
-			var previewImgBorder = Math.round(parseFloat(L.DomUtil.getStyle(img, 'border-top-width')));
-			var previewImgMinWidth = Math.round(parseFloat(L.DomUtil.getStyle(img, 'min-width')));
-			var imgHeight = imgSize.height;
-			var imgWidth = imgSize.width;
-			if (imgSize.width < previewImgMinWidth && window.mode.isDesktop())
-				imgHeight = Math.round(imgHeight * previewImgMinWidth / imgSize.width);
-			var previewFrameBB = img.parentElement.getBoundingClientRect();
-			if (this._direction === 'x') {
-				this._previewFrameMargin = previewFrameBB.left - this._previewContTop;
-				this._previewImgHeight = imgWidth;
-				this._previewFrameHeight = imgWidth + 2 * previewImgBorder;
-			} else {
-				this._previewFrameMargin = previewFrameBB.top - this._previewContTop;
-				this._previewImgHeight = imgHeight;
-				this._previewFrameHeight = imgHeight + 2 * previewImgBorder;
-			}
-		}
 	},
 
 	_scrollToPart: function() {
@@ -433,7 +385,7 @@ L.Control.PartsPreview = L.Control.extend({
 		//var sliderSize, nodePos, nodeOffset, nodeMargin;
 		var node = this._partsPreviewCont.children[partNo];
 
-		if (node && (!this._previewTiles[partNo] || !this._isPreviewVisible(partNo, false))) {
+		if (node && (!this._previewTiles[partNo] || !this._isPreviewVisible(partNo))) {
 			var nodePos = this._direction === 'x' ? $(node).position().left : $(node).position().top;
 			var scrollDirection = window.mode.isDesktop() || window.mode.isTablet() ? 'scrollTop': (L.DomUtil.isPortrait() ? 'scrollLeft': 'scrollTop');
 			var that = this;
@@ -515,7 +467,7 @@ L.Control.PartsPreview = L.Control.extend({
 		}
 
 		var part = this._findClickedPart(e.target.parentNode);
-		if (part !== null) {
+		if (part !== -1) {
 			var partId = parseInt(part) - 1; // The first part is just a drop-site for reordering.
 
 			if (app.file.fileBasedView) {
@@ -604,7 +556,7 @@ L.Control.PartsPreview = L.Control.extend({
 
 				for (it = 0; it < e.partNames.length; it++) {
 					this._previewTiles[it].hash = e.partNames[it];
-					L.LOUtil.setImage(this._previewTiles[it], 'preview_placeholder.png', this._map);
+					this._previewTiles[it].src = document.querySelector('meta[name="previewSmile"]').content;
 					this._previewTiles[it].fetched = false;
 				}
 			}
@@ -620,6 +572,26 @@ L.Control.PartsPreview = L.Control.extend({
 		}
 	},
 
+	_resize: function () {
+		if (this._height == window.innerHeight &&
+		    this._width == window.innerWidth)
+			return;
+
+		if (this._previewInitialized) {
+			clearTimeout(this._resizeTimer);
+			this._resizeTimer = setTimeout(L.bind(this._onScroll, this), 50);
+		}
+
+		this._height = window.innerHeight;
+		this._width = window.innerWidth;
+	},
+
+	_beforeRequestPreview: function (e) {
+		if (e.part !== undefined && e.part >= 0 && e.part < this._previewTiles.length &&
+		   this._previewTiles[e.part].src === document.querySelector('meta[name="previewSmile"]').content)
+			this._previewTiles[e.part].src = document.querySelector('meta[name="previewImg"]').content;
+	},
+
 	_updatePreview: function (e) {
 		if (this._map.isPresentationOrDrawing()) {
 			this._map._previewRequestsOnFly--;
@@ -633,6 +605,7 @@ L.Control.PartsPreview = L.Control.extend({
 			if (this._previewTiles[e.id]) {
 				this._previewTiles[e.id].src = e.tile.src;
 				this._previewTiles[e.id].fetched = true;
+				window.app.console.debug('PREVIEW: part fetched : ' + e.id);
 			}
 		}
 	},
@@ -662,64 +635,31 @@ L.Control.PartsPreview = L.Control.extend({
 		}
 	},
 
-	_onScroll: function (e) {
-		setTimeout(L.bind(function (e) {
-			var scrollOffset = 0;
-			if (e) {
-				var prevScrollY = this._scrollY;
-				var rectangle = e.target.getBoundingClientRect();
-				this._scrollY = this._direction === 'x' ? -rectangle.left : -rectangle.top;
-				scrollOffset = this._scrollY - prevScrollY;
-			}
-
-			var previewContBB = this._partsPreviewCont.getBoundingClientRect();
-			var extra =  this._direction === 'x' ? previewContBB.width : previewContBB.height;
-			var topBound = this._previewContTop - (scrollOffset < 0 ? extra : extra / 2);
-			var bottomBound = this._previewContTop + extra + (scrollOffset > 0 ? extra : extra / 2);
+	_onScroll: function () {
+		setTimeout(L.bind(function () {
 			for (var i = 0; i < this._previewTiles.length; ++i) {
-				var img = this._previewTiles[i];
-				if (img && img.parentNode && !img.fetched) {
-					var previewFrameBB = img.parentNode.getBoundingClientRect();
-					if (this._direction === 'x') {
-						if ((previewFrameBB.left >= topBound && previewFrameBB.left <= bottomBound)
-						|| (previewFrameBB.right >= topBound && previewFrameBB.right <= bottomBound)) {
-							this._map.getPreview(i, i, this.options.maxWidth, this.options.maxHeight, {autoUpdate: this.options.autoUpdate});
-						}
-					} else if ((previewFrameBB.top >= topBound && previewFrameBB.top <= bottomBound)
-						|| (previewFrameBB.bottom >= topBound && previewFrameBB.bottom <= bottomBound)) {
+				if (this._isPreviewVisible(i)) {
+					var img = this._previewTiles[i];
+					if (img && !img.fetched) {
 						this._map.getPreview(i, i, this.options.maxWidth, this.options.maxHeight, {autoUpdate: this.options.autoUpdate});
 					}
 				}
 			}
-		}, this, e), 0);
+		}, this), 0);
 	},
 
-	_isPreviewVisible: function(part, isFetching) {
-		isFetching = isFetching || false;
+	_isPreviewVisible: function(part) {
 		var el = this._previewTiles[part];
 		if (!el)
-			return true;
-		var elemRect = el.getBoundingClientRect();
-		var elemTop = elemRect.top;
-		var elemBottom = elemRect.bottom;
-		var elemLeft = elemRect.left;
-		var elemRight = elemRect.right;
-		var isVisible = false;
-		// dont skip the ones that are near visible or will be visible soon while scrolling.
-		if (isFetching)
-			isVisible = this._direction === 'x' ?
-				(0 - window.innerWidth / 3 <= elemLeft) && (elemRight <= window.innerWidth + window.innerWidth / 3) :
-				(0 - window.innerHeight / 3 <= elemTop) && (elemBottom <= window.innerHeight +  window.innerHeight / 3);
-		else
-			// this is for setPart function, should be completely visible for scrollto
-			isVisible = this._direction === 'x' ?
-				(elemLeft >= 0) && (elemRight <= window.innerWidth) :
-				(elemTop >= 0) && (elemBottom <= window.innerHeight);
+			return false;
 
-		if (!isVisible && isFetching)
-			// mark as false, this will be canceled
-			el.fetched = false;
-		return isVisible;
+		var elemRect = el.getBoundingClientRect();
+		var viewRect = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+
+		return (elemRect.left <= viewRect.right &&
+			viewRect.left <= elemRect.right &&
+			elemRect.top <= viewRect.bottom &&
+			viewRect.top <= elemRect.bottom)
 	},
 
 	_addDnDHandlers: function (elem) {
@@ -863,7 +803,13 @@ L.Control.PartsPreview = L.Control.extend({
 			e.stopPropagation();
 		}
 
-		var part = this.partsPreview._findClickedPart(e.target.parentNode);
+		// When dropping on a thumbnail we get an `img` tag as a target, so we need to get the
+		// parent.
+		// Otherwise dropping between slides doesn't work.
+		// See https://github.com/CollaboraOnline/online/issues/6941
+		var target = e.target.classList.contains('preview-img') ? e.target.parentNode : e.target;
+
+		var part = this.partsPreview._findClickedPart(target);
 		if (part !== null) {
 			var partId = parseInt(part) - 1; // First frame is a drop-site for reordering.
 			if (partId < 0)
@@ -887,8 +833,12 @@ L.Control.PartsPreview = L.Control.extend({
 			return;
 
 		for (var part = 0; part < this._previewTiles.length; part++) {
-			this._map.getPreview(part, part, this.options.maxWidth,
-					     this.options.maxHeight, {autoUpdate: this.options.autoUpdate});
+			this._previewTiles[part].fetched = false;
+			this._map.getPreview(part, part,
+					     this.options.maxWidth,
+					     this.options.maxHeight,
+					     {autoUpdate: this.options.autoUpdate,
+					      fetchThumbnail: this.options.fetchThumbnail});
 		}
 
 	},

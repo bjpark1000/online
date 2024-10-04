@@ -11,11 +11,11 @@
 
 #pragma once
 
-#include "config.h"
-
 #if MOBILEAPP
 
 #include <LibreOfficeKit/LibreOfficeKit.hxx>
+
+#include <Storage.hpp>
 
 #ifdef IOS
 #import "CODocument.h"
@@ -59,6 +59,34 @@ public:
 #ifdef IOS
     CODocument *coDocument;
 #endif
+};
+
+/// Stub/Dummy WOPI types/interface.
+class WopiStorage : public StorageBase
+{
+public:
+    class WOPIFileInfo : public FileInfo
+    {
+    public:
+        enum class TriState
+        {
+            False,
+            True,
+            Unset
+        };
+
+        std::string getTemplateSource() const { return std::string(); }
+
+        bool getDisablePrint() const { return false; }
+        bool getDisableExport() const { return false; }
+        bool getDisableCopy() const { return false; }
+        bool getEnableOwnerTermination() const { return false; }
+        std::string getWatermarkText() const { return std::string(); }
+
+        TriState getDisableChangeTrackingShow() const { return TriState::Unset; }
+        TriState getDisableChangeTrackingRecord() const { return TriState::Unset; }
+        TriState getHideChangeTrackingControls() const { return TriState::Unset; }
+    };
 };
 
 #endif
